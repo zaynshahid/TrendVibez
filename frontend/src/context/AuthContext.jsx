@@ -1,0 +1,158 @@
+import React, { createContext, useState, useEffect, useContext } from 'react';
+
+const AuthContext = createContext(null);
+
+export const API_URL = 'http://localhost:5000/api';
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('tv_token') || null);
+  const [loading, setLoading] = useState(true);
+
+  // Hydrate user profile on load if token exists
+  useEffect(() => {
+    async function loadUserProfile() {
+      const storedToken = localStorage.getItem('tv_token');
+      if (!storedToken) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}/auth/profile`, {
+          headers: {
+            'Authorization': `Bearer ${storedToken}`
+          }
+        });
+
+        if (res.ok) {
+          const userData = await res.json();
+          setUser(userData);
+          setToken(storedToken);
+        } else {
+          // Token is invalid or expired — wipe it cleanly
+          console.warn('Stored token is invalid, clearing session.');
+          localStorage.removeItem('tv_token');
+          setToken(null);
+          setUser(null);
+        }
+      } catch (err) {
+        console.error('Failed to load user profile:', err);
+        localStorage.removeItem('tv_token');
+        setToken(null);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadUserProfile();
+  }, []); // Run only once on mount
+
+  const login = async (email, password) => {
+    const res = await fetch(`${API_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Login failed');
+    }
+
+    localStorage.setItem('tv_token', data.token);
+    setToken(data.token);
+    setUser(data.user);
+    return data.user;
+  };
+
+  const register = async (name, email, password) => {
+    const res = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Registration failed');
+    }
+
+    localStorage.setItem('tv_token', data.token);
+    setToken(data.token);
+    setUser(data.user);
+    return data.user;
+  };
+
+  const googleLogin = async (credential) => {
+    const res = await fetch(`${API_URL}/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Google authentication failed');
+    }
+
+    localStorage.setItem('tv_token', data.token);
+    setToken(data.token);
+    setUser(data.user);
+    return data.user;
+  };
+
+  const logout = () => {
+    localStorage.removeItem('tv_token');
+    setToken(null);
+    setUser(null);
+  };
+
+  const updateProfile = async (profileData) => {
+    if (!token) return;
+
+    const res = await fetch(`${API_URL}/auth/profile`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(profileData)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Failed to update profile');
+    }
+
+    if (data.token) {
+      localStorage.setItem('tv_token', data.token);
+      setToken(data.token);
+    }
+    setUser(data.user);
+    return data.user;
+  };
+
+  const value = {
+    user,
+    token,
+    loading,
+    login,
+    register,
+    googleLogin,
+    logout,
+    updateProfile,
+    isAdmin: user?.role === 'admin'
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}

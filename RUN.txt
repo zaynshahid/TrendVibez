@@ -1,0 +1,7 @@
+cd C:\Users\shahi\Desktop\Website\backend
+npm install
+npm run dev
+
+cd C:\Users\shahi\Desktop\Website\frontend
+npm install
+npm run dev -- --host 0.0.0.0

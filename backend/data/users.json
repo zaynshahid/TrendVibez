@@ -1,0 +1,58 @@
+[
+  {
+    "id": "4e21a0cd-d0cd-4a06-8ef9-d4a9948b0392",
+    "name": "Zain Shahid",
+    "email": "zainshahid131@gmail.com",
+    "password": "$2a$10$2G0XDUgEthbsAV3EIv9C1.ZF.97/Cbz0u1NHz37psjvvc283iAN3y",
+    "role": "admin",
+    "createdAt": "2026-07-18T10:49:06.423Z"
+  },
+  {
+    "id": "bdd1e6df-9bb0-4fe4-a16a-345adb75495c",
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "password": null,
+    "role": "user",
+    "createdAt": "2026-07-18T10:52:07.973Z"
+  },
+  {
+    "id": "af31d799-4fcd-4681-a6de-7a4c594ad4c7",
+    "name": "Zainshahid3205",
+    "email": "zainshahid3205@gmail.com",
+    "password": "$2a$10$2cqVS37aW/ZwccGVKZpn9u/B6VGbUr3JxOMaKvSMeajsM35odMm.W",
+    "role": "user",
+    "createdAt": "2026-07-19T10:09:37.923Z"
+  },
+  {
+    "id": "db0f7daa-65a0-422a-b709-a855acf24ffa",
+    "name": "TrendVibe Admin",
+    "email": "admin@trendvibe.com",
+    "password": "$2a$10$Wb12HcCindL7KSQF02bImONZ8X5oeoXZ96hjV0X0Uq9kO9J.XY.JO",
+    "role": "admin",
+    "createdAt": "2026-07-19T10:20:30.233Z"
+  },
+  {
+    "id": "2ec24f81-9121-49b7-a781-e7ce5cabd16f",
+    "name": "ASDBASJKLCB",
+    "email": "asdbasjklcb@ajldf.com",
+    "password": "$2a$10$3jekIbNPad.KPAJ9ndPh.ubZoY/DazgWJH68pDZvs8TVt.jKErLsi",
+    "role": "user",
+    "createdAt": "2026-07-20T10:18:58.388Z"
+  },
+  {
+    "id": "95315af7-f159-4389-8c68-e3218c4a2328",
+    "name": "usman",
+    "email": "usmanparwaiz@gmail.com",
+    "password": "$2a$10$N8XxZPluSa/ZmuPK/1Q00uHTNlIogB60H4eWcY3tKlynNPXFHQSJC",
+    "role": "user",
+    "createdAt": "2026-07-20T11:25:30.576Z"
+  },
+  {
+    "id": "af26c22e-c2b3-468c-9bbe-d7b86412b883",
+    "name": "testing",
+    "email": "testing@gmail.com",
+    "password": "$2a$10$fa6K2ZxnrcDyoDME7Lu1RuzK2Xu9idN4CFva.Y/6Kg7ZOrSOxh8M.",
+    "role": "user",
+    "createdAt": "2026-07-21T09:11:45.701Z"
+  }
+]

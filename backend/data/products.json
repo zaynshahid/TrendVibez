@@ -1,0 +1,211 @@
+[
+  {
+    "id": "46c9b6cc-87bb-4961-a673-369594f266f6",
+    "name": "Classic Oxford Shirt",
+    "description": "Crafted from premium long-staple cotton, this classic Oxford shirt features a button-down collar, subtle tailoring, and a soft, breathable texture. Perfect for smart-casual and formal styling alike.",
+    "price": 45,
+    "category": "Men",
+    "image": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&auto=format&fit=crop&q=80",
+    "stock": 50,
+    "rating": 4.5,
+    "createdAt": "2026-07-18T09:48:03.873Z"
+  },
+  {
+    "id": "163fb59a-e98d-4378-82d8-4fc41eb57ea7",
+    "name": "Premium Slim Fit Denim",
+    "description": "Our signature slim-fit jeans are spun from high-grade Japanese selvedge denim with just a touch of stretch for ultimate flexibility. Finished with custom brass hardware and classic five-pocket design.",
+    "price": 60,
+    "category": "Men",
+    "image": "https://images.unsplash.com/photo-1542272604-787c3835535d?w=600&auto=format&fit=crop&q=80",
+    "stock": 40,
+    "rating": 4.7,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "1af5f688-1c6e-45c2-abd3-4ec4039fce69",
+    "name": "Minimalist Crewneck Sweater",
+    "description": "Spun from an extra-fine Merino wool blend, this crewneck sweater offers lightweight warmth and premium softness. Features ribbed details at the collar, cuffs, and hem.",
+    "price": 55,
+    "category": "Men",
+    "image": "https://images.unsplash.com/photo-1614975058789-41316d0e2e9c?w=600&auto=format&fit=crop&q=80",
+    "stock": 28,
+    "rating": 4.3,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "417c90a2-5605-480e-84d2-1494e9ae1825",
+    "name": "Modern Trench Coat",
+    "description": "A timeless silhouette engineered for the elements. Made with a water-repellent cotton gabardine weave, dynamic storm flaps, and a removable waist belt for custom styling.",
+    "price": 120,
+    "category": "Men",
+    "image": "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600&auto=format&fit=crop&q=80",
+    "stock": 14,
+    "rating": 4.8,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "fe01f30a-f1e6-4b5c-996b-7bdcfb09ecc9",
+    "name": "Urban Oversized Tee & Cargo Set",
+    "description": "A premium heavyweight cotton oversized t-shirt in washed black, paired with durable light beige multi-pocket cargo pants. Designed for comfort and structured drape.",
+    "price": 78,
+    "category": "Men",
+    "image": "/images/media__1784367895431.jpg",
+    "stock": 35,
+    "rating": 4.8,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "4a416a3e-4124-4428-87ad-81a94089bd21",
+    "name": "Classic Striped Oxford & Chino Set",
+    "description": "A sharp, vertically-striped Oxford cotton shirt detailed with polo collar embroidery, styled with comfortable relaxed-fit charcoal black trousers.",
+    "price": 65,
+    "category": "Men",
+    "image": "/images/media__1784367895435.jpg",
+    "stock": 24,
+    "rating": 4.6,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "3861c47d-b9c1-4dd7-a72c-0104f2c9e735",
+    "name": "Premium Linen Shirt in Coffee",
+    "description": "Spun from 100% pure lightweight linen, this chocolate brown casual button-down shirt offers ultimate summer comfort. Styled here with cream white tapered slacks.",
+    "price": 52,
+    "category": "Men",
+    "image": "/images/media__1784367895484.jpg",
+    "stock": 30,
+    "rating": 4.7,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "c75236b6-af37-452e-9da1-d310a5d31333",
+    "name": "Ocean Breeze Linen Shirt",
+    "description": "A relaxed resort-fit button-up shirt in light sky blue, made of extra-breathable cotton-linen blend. Ideal for coastal sunsets and warm evenings.",
+    "price": 55,
+    "category": "Men",
+    "image": "/images/media__1784367895505.jpg",
+    "stock": 20,
+    "rating": 4.9,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "81b74c90-6853-48bf-8c0a-bef30f2110e8",
+    "name": "Floral Summer Dress",
+    "description": "Breathe free in this elegant, lightweight georgette dress decorated with hand-painted floral motifs. Tailored with a flattering wrap bodice, ruffled hem, and adjustable straps.",
+    "price": 65,
+    "category": "Women",
+    "image": "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=600&auto=format&fit=crop&q=80",
+    "stock": 24,
+    "rating": 4.6,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "e5489c66-f730-4d72-948b-76cee262130a",
+    "name": "Oversized Cashmere Blazer",
+    "description": "Tailored to perfection, this modern double-breasted blazer blends structured structure with unstructured comfort. Crafted from a mid-weight wool and premium cashmere blend.",
+    "price": 95,
+    "category": "Women",
+    "image": "https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=600&auto=format&fit=crop&q=80",
+    "stock": 17,
+    "rating": 4.4,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "1a986a81-f32d-4221-8a9b-c3b9f6def3a9",
+    "name": "Classic High-Waisted Trousers",
+    "description": "Designed to sit comfortably at your natural waist, these wide-leg trousers are cut from durable crease-resistant crepe. Features front pleats, side slip pockets, and a neat concealed zip closure.",
+    "price": 50,
+    "category": "Women",
+    "image": "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=600&auto=format&fit=crop&q=80",
+    "stock": 33,
+    "rating": 4.2,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "a5a1c313-e5af-4520-aaae-736cc0143b89",
+    "name": "Ribbed Knit Crop Top",
+    "description": "Constructed from highly elastic ribbed cotton-viscose blend. Designed for comfort, versatility, and everyday elegance. Great for layering or solo wear.",
+    "price": 30,
+    "category": "Women",
+    "image": "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=600&auto=format&fit=crop&q=80",
+    "stock": 59,
+    "rating": 4.5,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "54a8b2f5-e0d7-4f1a-bde5-8e134ca214df",
+    "name": "Organic Cotton Dungarees",
+    "description": "Sweet, sturdy, and spun from 100% GOTS-certified organic cotton denim. Features adjustable shoulder straps with metal sliders and snap closures along the inner legs for easy changes.",
+    "price": 35,
+    "category": "Kids",
+    "image": "https://images.unsplash.com/photo-1519457431-44ccd64a579b?w=600&auto=format&fit=crop&q=80",
+    "stock": 24,
+    "rating": 4.6,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "8c4066e4-a8a3-4810-b373-db2d4cced9db",
+    "name": "Unisex Hooded Windbreaker",
+    "description": "A vibrant, water-resistant outer layer designed to withstand playground play. Finished with a mesh-lined hood, zipper guard, elasticated cuffs, and reflective safety trims.",
+    "price": 40,
+    "category": "Kids",
+    "image": "https://images.unsplash.com/photo-1471286174890-9c112ffca5b4?w=600&auto=format&fit=crop&q=80",
+    "stock": 29,
+    "rating": 4.4,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "f85bc8c0-94ab-4e87-b1d5-269b6eef57fe",
+    "name": "Cozy Fleece Sweatshirt",
+    "description": "Extremely soft high-loft fleece sweater built for warmth. Features a bright, fun design with a comfortable stretch-rib collar and handy kangaroo pocket.",
+    "price": 28,
+    "category": "Kids",
+    "image": "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=600&auto=format&fit=crop&q=80",
+    "stock": 45,
+    "rating": 4.8,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "3ec0b5c3-c2af-4cdc-a9f6-98a3f3363965",
+    "name": "Patterned Pyjama Set",
+    "description": "Sweet dreams await in this snug-fit pyjama set. Spun from breathable, lightweight organic cotton jersey with flat-lock seams that do not irritate sensitive skin.",
+    "price": 22,
+    "category": "Kids",
+    "image": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=600&auto=format&fit=crop&q=80",
+    "stock": 50,
+    "rating": 4.5,
+    "createdAt": "2026-07-18T09:48:03.874Z"
+  },
+  {
+    "id": "b31d5a88-4e8a-40cb-b71d-c3a7e1316d66",
+    "name": "Cloud Runner Sneakers",
+    "description": "Lightweight everyday sneakers with a cushioned sole, breathable mesh upper, and a sleek minimalist profile for all-day comfort.",
+    "price": 78,
+    "category": "Footwear",
+    "image": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&auto=format&fit=crop&q=80",
+    "stock": 24,
+    "rating": 4.7,
+    "createdAt": "2026-07-18T09:48:03.875Z"
+  },
+  {
+    "id": "4bfe2085-8c1f-4a43-8870-20f6f846a86b",
+    "name": "Atlas Leather Loafers",
+    "description": "Polished leather loafers with a sculpted sole, refined stitching, and a timeless silhouette that elevates smart casual outfits.",
+    "price": 95,
+    "category": "Footwear",
+    "image": "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&auto=format&fit=crop&q=80",
+    "stock": 18,
+    "rating": 4.8,
+    "createdAt": "2026-07-18T09:48:03.876Z"
+  },
+  {
+    "id": "6c33b90d-d4ec-46fb-8bf7-5ae7e20bd6ec",
+    "name": "Moss Weather Boots",
+    "description": "Water-resistant ankle boots with a rugged outsole, soft lining, and earthy tones designed for cool-weather style.",
+    "price": 88,
+    "category": "Footwear",
+    "image": "https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=600&auto=format&fit=crop&q=80",
+    "stock": 16,
+    "rating": 4.6,
+    "createdAt": "2026-07-18T09:48:03.877Z"
+  }
+]
