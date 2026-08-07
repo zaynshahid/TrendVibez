@@ -7,23 +7,31 @@ import { API_URL } from '../context/AuthContext.jsx';
 
 export default function Home() {
   const [featured, setFeatured] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchFeaturedProducts() {
+    async function fetchData() {
       try {
-        const res = await fetch(`${API_URL}/products?sort=newest`);
-        if (res.ok) {
-          const data = await res.json();
+        const [productsRes, categoriesRes] = await Promise.all([
+          fetch(`${API_URL}/products?sort=newest`),
+          fetch(`${API_URL}/categories`)
+        ]);
+        if (productsRes.ok) {
+          const data = await productsRes.json();
           setFeatured(data.slice(0, 4));
         }
+        if (categoriesRes.ok) {
+          const cats = await categoriesRes.json();
+          setCategories(cats);
+        }
       } catch (err) {
-        console.error('Failed to load featured products:', err);
+        console.error('Failed to load home data:', err);
       } finally {
         setLoading(false);
       }
     }
-    fetchFeaturedProducts();
+    fetchData();
   }, []);
 
   return (
@@ -75,19 +83,22 @@ export default function Home() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.35rem' }}>
-            {[
-              { to: '/products?category=Men', img: 'https://images.unsplash.com/photo-1617137968427-85924c800a22?w=700&auto=format&fit=crop&q=80', label: "Men's Apparel", sub: 'Tailoring & Denim' },
-              { to: '/products?category=Women', img: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=700&auto=format&fit=crop&q=80', label: "Women's Wear", sub: 'Dresses & Trousers' },
-              { to: '/products?category=Kids', img: 'https://images.unsplash.com/photo-1503919545889-aef636e10ad4?w=700&auto=format&fit=crop&q=80', label: 'Kids & Toddlers', sub: 'Fleece & Dungarees' },
-              { to: '/products?category=Footwear', img: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=700&auto=format&fit=crop&q=80', label: 'Footwear', sub: 'Sneakers & Loafers' },
-            ].map(({ to, img, label, sub }, index) => (
-              <motion.div key={to} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.45, delay: index * 0.08 }}>
-                <Link to={to} style={{ position: 'relative', display: 'block', height: '420px', overflow: 'hidden', textDecoration: 'none', borderRadius: '24px', boxShadow: 'var(--shadow-sm)' }} className="soft-card">
-                  <img src={img} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block', transition: 'transform 0.6s ease' }} />
+            {categories.map(({ id, name, image, subtitle }, index) => (
+              <motion.div key={id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.45, delay: index * 0.08 }}>
+                <Link to={`/products?category=${encodeURIComponent(name)}`} style={{ position: 'relative', display: 'block', height: '420px', overflow: 'hidden', textDecoration: 'none', borderRadius: '24px', boxShadow: 'var(--shadow-sm)' }} className="soft-card">
+                  {image ? (
+                    <img src={image} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block', transition: 'transform 0.6s ease' }} />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, hsl(${(index * 67) % 360}, 45%, 28%) 0%, hsl(${(index * 67 + 40) % 360}, 55%, 18%) 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: '4rem', opacity: 0.25 }}>🏷️</span>
+                    </div>
+                  )}
                   <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(44,24,16,0.86) 0%, rgba(44,24,16,0.2) 60%, rgba(44,24,16,0) 100%)' }} />
                   <div style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem' }}>
-                    <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.4rem', color: 'var(--bg-primary)', marginBottom: '0.3rem' }}>{label}</h3>
-                    <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.75rem', color: 'var(--beige)', display: 'flex', alignItems: 'center', gap: '0.35rem', letterSpacing: '0.05em' }}>{sub} <ArrowRight size={12} /></p>
+                    <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.4rem', color: 'var(--bg-primary)', marginBottom: '0.3rem' }}>{name}</h3>
+                    {subtitle && (
+                      <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.75rem', color: 'var(--beige)', display: 'flex', alignItems: 'center', gap: '0.35rem', letterSpacing: '0.05em' }}>{subtitle} <ArrowRight size={12} /></p>
+                    )}
                   </div>
                 </Link>
               </motion.div>

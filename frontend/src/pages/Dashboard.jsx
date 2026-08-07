@@ -247,7 +247,7 @@ export default function Dashboard() {
                 return (
                   <div 
                     key={order.id} 
-                    className="overflow-hidden payment-panel rounded-2xl border border-brown-faint shadow-sm"
+                    className="payment-panel rounded-2xl border border-brown-faint shadow-sm"
                   >
                     {/* Order Collapsible Header */}
                     <button
@@ -257,7 +257,7 @@ export default function Dashboard() {
                       <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
                         <div>
                           <span className="text-text-secondary block uppercase tracking-wider text-[10px]">Reference</span>
-                          <span className="font-bold text-brown-dark">{order.orderReference}</span>
+                          <span className="font-bold text-brown-dark break-all">{order.orderReference}</span>
                         </div>
                         <div>
                           <span className="text-text-secondary block uppercase tracking-wider text-[10px]">Date Placed</span>
@@ -295,15 +295,15 @@ export default function Dashboard() {
                         {/* Items in order */}
                         <div className="space-y-2">
                           <span className="text-[10px] font-bold text-brown-primary uppercase tracking-wider block">Items Purchased</span>
-                          <div className="divide-y divide-brown-faint bg-brown-faint/80 rounded-xl border border-brown-faint px-4">
+                          <div className="divide-y divide-brown-faint bg-brown-faint/80 rounded-xl border border-brown-faint px-4 overflow-hidden">
                             {order.items.map((item) => (
-                              <div key={item.productId} className="flex justify-between py-3 text-xs">
-                                <div className="flex gap-2 items-center">
-                                  <div className="h-10 w-8 shrink-0 overflow-hidden rounded bg-beige">
+                              <div key={item.productId} className="flex flex-col gap-3 py-3 text-xs sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex min-w-0 gap-3 items-center">
+                                  <div className="h-12 w-10 shrink-0 overflow-hidden rounded-md bg-beige">
                                     <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
                                   </div>
-                                  <div className="space-y-0.5">
-                                    <span className="font-semibold text-brown-dark block">{item.name}</span>
+                                  <div className="min-w-0 space-y-0.5">
+                                    <span className="font-semibold text-brown-dark block break-words">{item.name}</span>
                                     {item.selectedColor && (
                                       <span className="inline-block text-[10px] font-bold text-brown-primary">
                                         Size: {item.selectedColor}
@@ -312,7 +312,7 @@ export default function Dashboard() {
                                     <span className="text-text-secondary block">${item.price.toFixed(2)} each</span>
                                   </div>
                                 </div>
-                                <div className="text-right">
+                                <div className="shrink-0 text-left sm:text-right">
                                   <span className="font-bold text-brown-dark block">${(item.price * item.quantity).toFixed(2)}</span>
                                   <span className="text-text-secondary">Qty: {item.quantity}</span>
                                 </div>

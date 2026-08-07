@@ -52,6 +52,7 @@ export async function initDb() {
     // 4. Seed tables
     await seedAdmin();
     await seedProducts();
+    await seedCategories();
     await seedProductSizeInventory();
     await seedOrdersAndCarts();
 
@@ -62,6 +63,21 @@ export async function initDb() {
 }
 
 async function createTables() {
+  // Categories table
+  await query(`
+    CREATE TABLE IF NOT EXISTS categories (
+      id VARCHAR(36) PRIMARY KEY,
+      name VARCHAR(100) NOT NULL UNIQUE,
+      image VARCHAR(2083) NOT NULL DEFAULT '',
+      subtitle VARCHAR(255) NOT NULL DEFAULT '',
+      createdAt VARCHAR(50) NOT NULL
+    )
+  `);
+
+  // Migrate existing categories table to add image and subtitle columns
+  try { await query(`ALTER TABLE categories ADD COLUMN image VARCHAR(2083) NOT NULL DEFAULT ''`); } catch (e) {}
+  try { await query(`ALTER TABLE categories ADD COLUMN subtitle VARCHAR(255) NOT NULL DEFAULT ''`); } catch (e) {}
+
   // Users table
   await query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -291,6 +307,37 @@ async function seedProducts() {
   }
 }
 
+async function seedCategories() {
+  const countRes = await query('SELECT COUNT(*) as count FROM categories');
+  if (countRes[0].count > 0) return;
+
+  const defaultCategories = [
+    { name: 'Men',     image: 'https://images.unsplash.com/photo-1617137968427-85924c800a22?w=700&auto=format&fit=crop&q=80', subtitle: 'Tailoring & Denim' },
+    { name: 'Women',   image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=700&auto=format&fit=crop&q=80', subtitle: 'Dresses & Trousers' },
+    { name: 'Kids',    image: 'https://images.unsplash.com/photo-1503919545889-aef636e10ad4?w=700&auto=format&fit=crop&q=80', subtitle: 'Fleece & Dungarees' },
+    { name: 'Footwear',image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=700&auto=format&fit=crop&q=80', subtitle: 'Sneakers & Loafers' },
+  ];
+
+  // Also pull in any extra categories already in products table
+  const prodCats = await query('SELECT DISTINCT category FROM products');
+  const catMap = new Map(defaultCategories.map(c => [c.name.toLowerCase(), c]));
+  prodCats.forEach(row => {
+    const key = (row.category || '').trim().toLowerCase();
+    if (key && !catMap.has(key)) {
+      catMap.set(key, { name: row.category.trim(), image: '', subtitle: '' });
+    }
+  });
+
+  const now = new Date().toISOString();
+  for (const cat of catMap.values()) {
+    await query(
+      'INSERT IGNORE INTO categories (id, name, image, subtitle, createdAt) VALUES (?, ?, ?, ?, ?)',
+      [uuidv4(), cat.name, cat.image, cat.subtitle, now]
+    );
+  }
+  console.log('Seeded categories table.');
+}
+
 async function seedProductSizeInventory() {
   const rows = await query('SELECT id, variantData FROM products');
   for (const product of rows) {
@@ -304,8 +351,10 @@ async function seedProductSizeInventory() {
     })();
     await syncProductSizeInventory(product.id, variants);
     const sizeRows = await query('SELECT stock FROM product_size_inventory WHERE productId = ?', [product.id]);
-    const totalSizeStock = (sizeRows || []).reduce((sum, row) => sum + parseInt(row.stock || 0), 0);
-    await query('UPDATE products SET stock = ? WHERE id = ?', [totalSizeStock, product.id]);
+    if (sizeRows.length > 0) {
+      const totalSizeStock = sizeRows.reduce((sum, row) => sum + parseInt(row.stock || 0), 0);
+      await query('UPDATE products SET stock = ? WHERE id = ?', [totalSizeStock, product.id]);
+    }
   }
 }
 
@@ -837,13 +886,19 @@ export async function deleteOrder(orderId) {
 export async function getAdminStats() {
   const orders = await getOrders(null, true);
   const products = await query('SELECT * FROM products');
+  const catRows = await query('SELECT name FROM categories');
 
   let totalSales = 0;
   let numOrders = orders.length;
 
-  const categorySales = { Men: 0, Women: 0, Kids: 0 };
-  const categoryQty = { Men: 0, Women: 0, Kids: 0 };
+  const categorySales = {};
+  const categoryQty = {};
   const dailySales = {};
+
+  catRows.forEach(c => {
+    categorySales[c.name] = 0;
+    categoryQty[c.name] = 0;
+  });
 
   orders.forEach(order => {
     if (order.status !== 'Cancelled') {
@@ -860,7 +915,7 @@ export async function getAdminStats() {
 
     order.items.forEach(item => {
       const originalProduct = products.find(p => p.id === item.productId);
-      const category = originalProduct ? originalProduct.category : 'Men';
+      const category = originalProduct ? originalProduct.category : 'Other';
 
       if (order.status !== 'Cancelled') {
         categorySales[category] = (categorySales[category] || 0) + (item.price * item.quantity);
@@ -882,15 +937,16 @@ export async function getAdminStats() {
     .map(([date, amount]) => ({ date, amount: parseFloat(amount.toFixed(2)) }))
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 
+  const formattedCategorySales = {};
+  Object.entries(categorySales).forEach(([cat, amt]) => {
+    formattedCategorySales[cat] = parseFloat((amt || 0).toFixed(2));
+  });
+
   return {
     totalSales: parseFloat(totalSales.toFixed(2)),
     numOrders,
     bestSellingCategory,
-    categorySales: {
-      Men: parseFloat((categorySales.Men || 0).toFixed(2)),
-      Women: parseFloat((categorySales.Women || 0).toFixed(2)),
-      Kids: parseFloat((categorySales.Kids || 0).toFixed(2))
-    },
+    categorySales: formattedCategorySales,
     revenueOverTime,
     recentOrders: orders.slice(0, 5) // getOrders returns sorted DESC, we take the top 5
   };
@@ -1011,3 +1067,116 @@ export async function getActivityLogsMeta() {
     admins: admins.map(r => ({ id: r.adminId, name: r.adminName }))
   };
 }
+
+// Category Helper Methods
+export async function getAllCategories() {
+  const sql = `
+    SELECT 
+      c.id, 
+      c.name, 
+      c.image,
+      c.subtitle,
+      c.createdAt, 
+      COUNT(p.id) AS productCount
+    FROM categories c
+    LEFT JOIN products p ON LOWER(c.name) = LOWER(p.category)
+    GROUP BY c.id, c.name, c.image, c.subtitle, c.createdAt
+    ORDER BY c.name ASC
+  `;
+  const rows = await query(sql);
+  return rows.map(r => ({
+    id: r.id,
+    name: r.name,
+    image: r.image || '',
+    subtitle: r.subtitle || '',
+    createdAt: r.createdAt,
+    productCount: parseInt(r.productCount || 0)
+  }));
+}
+
+export async function findCategoryByName(name) {
+  if (!name) return null;
+  const rows = await query('SELECT * FROM categories WHERE LOWER(name) = LOWER(?)', [name.trim()]);
+  return rows[0] || null;
+}
+
+export async function findCategoryById(id) {
+  const rows = await query('SELECT * FROM categories WHERE id = ?', [id]);
+  return rows[0] || null;
+}
+
+export async function createCategory({ name, image = '', subtitle = '' }) {
+  const trimmed = name.trim();
+  const existing = await findCategoryByName(trimmed);
+  if (existing) {
+    const error = new Error('Category with this name already exists.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const id = uuidv4();
+  const createdAt = new Date().toISOString();
+  const cleanImage = (image || '').trim();
+  const cleanSubtitle = (subtitle || '').trim();
+
+  await query(
+    'INSERT INTO categories (id, name, image, subtitle, createdAt) VALUES (?, ?, ?, ?, ?)',
+    [id, trimmed, cleanImage, cleanSubtitle, createdAt]
+  );
+
+  return { id, name: trimmed, image: cleanImage, subtitle: cleanSubtitle, createdAt, productCount: 0 };
+}
+
+export async function updateCategory(id, { name, image, subtitle }) {
+  const category = await findCategoryById(id);
+  if (!category) {
+    const error = new Error('Category not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const newName = name.trim();
+  const existing = await findCategoryByName(newName);
+  if (existing && existing.id !== id) {
+    const error = new Error('Category with this name already exists.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const oldName = category.name;
+  const cleanImage = image !== undefined ? (image || '').trim() : (category.image || '');
+  const cleanSubtitle = subtitle !== undefined ? (subtitle || '').trim() : (category.subtitle || '');
+
+  await query('UPDATE categories SET name = ?, image = ?, subtitle = ? WHERE id = ?', [newName, cleanImage, cleanSubtitle, id]);
+
+  if (oldName !== newName) {
+    await query('UPDATE products SET category = ? WHERE LOWER(category) = LOWER(?)', [newName, oldName]);
+  }
+
+  const countRows = await query('SELECT COUNT(*) as count FROM products WHERE LOWER(category) = LOWER(?)', [newName]);
+  const productCount = countRows[0] ? parseInt(countRows[0].count) : 0;
+
+  return { id, name: newName, image: cleanImage, subtitle: cleanSubtitle, createdAt: category.createdAt, productCount };
+}
+
+export async function deleteCategory(id) {
+  const category = await findCategoryById(id);
+  if (!category) {
+    const error = new Error('Category not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const countRows = await query('SELECT COUNT(*) as count FROM products WHERE LOWER(category) = LOWER(?)', [category.name]);
+  const productCount = countRows[0] ? parseInt(countRows[0].count) : 0;
+
+  if (productCount > 0) {
+    const error = new Error(`Cannot delete category "${category.name}" because it is currently assigned to ${productCount} product(s). Please reassign or delete those products first.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  await query('DELETE FROM categories WHERE id = ?', [id]);
+  return { success: true, message: `Category "${category.name}" deleted successfully.` };
+}
+

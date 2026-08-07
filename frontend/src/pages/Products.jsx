@@ -150,12 +150,42 @@ export default function Products() {
     setSearchParams(newParams);
   };
 
+  const [dbCategories, setDbCategories] = useState([]);
+
+  useEffect(() => {
+    async function fetchCategories() {
+      try {
+        const res = await fetch(`${API_URL}/categories`);
+        if (res.ok) {
+          const data = await res.json();
+          setDbCategories(data.map(c => c.name));
+        }
+      } catch (e) {
+        console.error('Failed to fetch categories:', e);
+      }
+    }
+    fetchCategories();
+  }, []);
+
   const resetAllFilters = () => {
     setSearchTerm(''); setDraftMinPrice(''); setDraftMaxPrice(''); setDraftMinRating(''); setDraftInStock(false);
     setSearchParams({});
   };
 
-  const categories = ['All', 'Men', 'Women', 'Kids', 'Footwear'];
+  const defaultCategoryList = ['All', 'Men', 'Women', 'Kids', 'Footwear'];
+  const allCategoryOptions = ['All'];
+  const categorySet = new Set(['all']);
+  
+  [...defaultCategoryList.slice(1), ...dbCategories].forEach(c => {
+    if (c && typeof c === 'string') {
+      const trimmed = c.trim();
+      const lower = trimmed.toLowerCase();
+      if (!categorySet.has(lower)) {
+        categorySet.add(lower);
+        allCategoryOptions.push(trimmed);
+      }
+    }
+  });
 
   const activeFilterChips = [];
   if (activeQuery) activeFilterChips.push({ label: `"${activeQuery}"`, key: 'q' });
@@ -180,11 +210,122 @@ export default function Products() {
     <div className="animate-slide-up" style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh' }}>
       <style>{`
         .products-input:focus { border-color: var(--brown-primary); box-shadow: 0 0 0 3px rgba(111,78,55,0.1); }
-        .cat-tab { font-family: var(--font-sans); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.5rem 0; cursor: pointer; background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); transition: color 0.2s ease, border-color 0.2s ease; }
-        .cat-tab:hover, .cat-tab.active { color: var(--brown-primary); border-bottom-color: var(--brown-primary); }
+        .cat-tab { font-family: var(--font-sans); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.6rem 1.25rem; cursor: pointer; border-radius: 999px; transition: all 0.2s ease; }
+        .cat-tab-active { background: var(--brown-primary) !important; color: #ffffff !important; border-color: var(--brown-primary) !important; box-shadow: 0 4px 14px rgba(111,78,55,0.25); }
         .sort-select { background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-secondary); font-family: var(--font-sans); font-size: 0.75rem; padding: 0.5rem 0.75rem; outline: none; cursor: pointer; }
         .sort-select:focus { border-color: var(--brown-primary); }
       `}</style>
+
+      {/* ── Top Category Header Banner ───────────────────────────────── */}
+      <div style={{ backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', padding: '2.5rem 2rem 2rem' }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+          {/* Title & Top Search */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
+            <div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.25rem 0.75rem', background: 'rgba(111,78,55,0.08)', borderRadius: '999px', marginBottom: '0.5rem' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--brown-primary)' }} />
+                <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--brown-primary)' }}>
+                  {activeCategory !== 'All' ? `${activeCategory} Collection` : 'All Collections'}
+                </span>
+              </div>
+              <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: '2.2rem', fontWeight: 700, color: 'var(--brown-dark)', letterSpacing: '-0.02em', margin: 0 }}>
+                {activeCategory !== 'All' ? `${activeCategory}'s Collection` : 'The Clothing Collection'}
+              </h1>
+              <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+                Discover our curated range of luxury apparel & modern wardrobe essentials.
+              </p>
+            </div>
+
+            {/* Quick Search */}
+            <form onSubmit={handleSearchSubmit} style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: '340px', position: 'relative' }}>
+              <input
+                id="collection-search-input"
+                type="text"
+                placeholder="Search collection..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="products-input"
+                style={{
+                  ...inputStyle,
+                  borderRadius: '999px',
+                  paddingLeft: '1.1rem',
+                  paddingRight: '2.5rem',
+                  height: '42px',
+                  boxShadow: 'var(--shadow-sm)',
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  position: 'absolute',
+                  right: '0.75rem',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--brown-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0.2rem',
+                }}
+                aria-label="Search collection"
+              >
+                <Search size={16} />
+              </button>
+            </form>
+          </div>
+
+          {/* Categories Navigation Bar On Top */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
+                Select Category
+              </span>
+              <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                Showing items for: <strong style={{ color: 'var(--brown-primary)' }}>{activeCategory}</strong>
+              </span>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.6rem',
+                overflowX: 'auto',
+                paddingBottom: '0.4rem',
+                scrollbarWidth: 'none',
+              }}
+            >
+              {allCategoryOptions.map((cat) => {
+                const isActive = (activeCategory.toLowerCase() === cat.toLowerCase()) || (activeCategory === 'All' && cat === 'All');
+                return (
+                  <button
+                    key={cat}
+                    id={`top-cat-${cat.toLowerCase()}`}
+                    type="button"
+                    onClick={() => updateParam('category', cat === 'All' ? '' : cat)}
+                    className={`cat-tab ${isActive ? 'cat-tab-active' : ''}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      whiteSpace: 'nowrap',
+                      background: isActive ? 'var(--brown-primary)' : 'var(--bg-primary)',
+                      color: isActive ? '#ffffff' : 'var(--text-secondary)',
+                      border: isActive ? '1px solid var(--brown-primary)' : '1px solid var(--border-color)',
+                    }}
+                  >
+                    <span>{cat}</span>
+                    {isActive && (
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ffffff', display: 'inline-block' }} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* ── Main Body ───────────────────────────────────────────────── */}
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '2rem 2rem 4rem' }}>
@@ -218,6 +359,45 @@ export default function Products() {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+                {/* Categories */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.6rem' }}>
+                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.05em' }}>Category</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    {allCategoryOptions.map((cat) => {
+                      const isActive = (activeCategory.toLowerCase() === cat.toLowerCase()) || (activeCategory === 'All' && cat === 'All');
+                      return (
+                        <button
+                          key={cat}
+                          id={`sidebar-cat-${cat.toLowerCase()}`}
+                          type="button"
+                          onClick={() => updateParam('category', cat === 'All' ? '' : cat)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.45rem 0.65rem',
+                            fontFamily: 'var(--font-sans)',
+                            fontSize: '0.75rem',
+                            fontWeight: isActive ? 700 : 500,
+                            color: isActive ? 'var(--brown-primary)' : 'var(--text-secondary)',
+                            background: isActive ? 'rgba(111,78,55,0.08)' : 'transparent',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span>{cat}</span>
+                          {isActive && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--brown-primary)' }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 {/* Price Range */}
                 <div>

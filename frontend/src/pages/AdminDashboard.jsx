@@ -17,7 +17,9 @@ import {
   UserCheck,
   TrendingUp,
   Shirt,
-  Activity
+  Activity,
+  Tag,
+  FolderTree
 } from 'lucide-react';
 import ActivityLogTab from '../components/ActivityLogTab.jsx';
 
@@ -32,6 +34,16 @@ export default function AdminDashboard() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [users, setUsers] = useState([]);
+  const [categories, setCategories] = useState([]);
+
+  // Category Management States
+  const [catSearch, setCatSearch] = useState('');
+  const [isCatModalOpen, setIsCatModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [catNameInput, setCatNameInput] = useState('');
+  const [catImageInput, setCatImageInput] = useState('');
+  const [catSubtitleInput, setCatSubtitleInput] = useState('');
+  const [catSubmitting, setCatSubmitting] = useState(false);
 
   // Loaders & Errors
   const [loading, setLoading] = useState(true);
@@ -59,33 +71,26 @@ export default function AdminDashboard() {
   const loadData = async () => {
     setLoading(true);
     setErrorMsg('');
+    const headers = { 'Authorization': `Bearer ${token}` };
+
     try {
-      const headers = { 'Authorization': `Bearer ${token}` };
-
-      // Fetch stats
-      const statsRes = await fetch(`${API_URL}/admin/stats`, { headers });
-      if (!statsRes.ok) throw new Error('Failed to load sales stats.');
-      const statsData = await statsRes.json();
-      setStats(statsData);
-
-      // Fetch products
-      const prodRes = await fetch(`${API_URL}/products`);
-      if (!prodRes.ok) throw new Error('Failed to load products list.');
-      const prodData = await prodRes.json();
-      setProducts(prodData);
-
-      // Fetch all orders
-      const orderRes = await fetch(`${API_URL}/orders`, { headers });
-      if (!orderRes.ok) throw new Error('Failed to load orders.');
-      const orderData = await orderRes.json();
-      setOrders(orderData);
-
-      // Fetch users
-      const usersRes = await fetch(`${API_URL}/admin/users`, { headers });
-      if (!usersRes.ok) throw new Error('Failed to load user accounts.');
-      const usersData = await usersRes.json();
-      setUsers(usersData);
-
+      await Promise.all([
+        fetch(`${API_URL}/admin/stats`, { headers })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => { if (data) setStats(data); }),
+        fetch(`${API_URL}/products`)
+          .then(r => r.ok ? r.json() : [])
+          .then(data => setProducts(data)),
+        fetch(`${API_URL}/orders`, { headers })
+          .then(r => r.ok ? r.json() : [])
+          .then(data => setOrders(data)),
+        fetch(`${API_URL}/admin/users`, { headers })
+          .then(r => r.ok ? r.json() : [])
+          .then(data => setUsers(data)),
+        fetch(`${API_URL}/categories`)
+          .then(r => r.ok ? r.json() : [])
+          .then(data => setCategories(data))
+      ]);
     } catch (err) {
       console.error(err);
       setErrorMsg(err.message || 'An error occurred fetching dashboard logs.');
@@ -108,13 +113,106 @@ export default function AdminDashboard() {
     setTimeout(() => setActionError(''), 5000);
   };
 
+  // Category CRUD ACTIONS
+  const openAddCategoryModal = () => {
+    setEditingCategory(null);
+    setCatNameInput('');
+    setCatImageInput('');
+    setCatSubtitleInput('');
+    setIsCatModalOpen(true);
+  };
+
+  const openEditCategoryModal = (cat) => {
+    setEditingCategory(cat);
+    setCatNameInput(cat.name);
+    setCatImageInput(cat.image || '');
+    setCatSubtitleInput(cat.subtitle || '');
+    setIsCatModalOpen(true);
+  };
+
+  const handleCategorySubmit = async (e) => {
+    e.preventDefault();
+    const trimmed = catNameInput.trim();
+    if (!trimmed) {
+      triggerError('Category name cannot be empty.');
+      return;
+    }
+
+    const duplicate = categories.find(
+      c => c.name.toLowerCase() === trimmed.toLowerCase() && (!editingCategory || c.id !== editingCategory.id)
+    );
+    if (duplicate) {
+      triggerError(`A category named "${trimmed}" already exists.`);
+      return;
+    }
+
+    setCatSubmitting(true);
+    try {
+      const method = editingCategory ? 'PUT' : 'POST';
+      const endpoint = editingCategory ? `${API_URL}/categories/${editingCategory.id}` : `${API_URL}/categories`;
+
+      const res = await fetch(endpoint, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ name: trimmed, image: catImageInput.trim(), subtitle: catSubtitleInput.trim() })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to save category.');
+
+      setIsCatModalOpen(false);
+      triggerSuccess(editingCategory ? `Category "${trimmed}" updated successfully!` : `Category "${trimmed}" created successfully!`);
+      loadData();
+    } catch (err) {
+      triggerError(err.message);
+    } finally {
+      setCatSubmitting(false);
+    }
+  };
+
+  const handleCategoryDelete = async (cat) => {
+    if (cat.productCount > 0) {
+      triggerError(`Cannot delete category "${cat.name}" because ${cat.productCount} product(s) are currently using it. Please reassign or delete those products first.`);
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete category "${cat.name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/categories/${cat.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to delete category.');
+
+      triggerSuccess(data.message || `Category "${cat.name}" deleted successfully.`);
+      loadData();
+    } catch (err) {
+      triggerError(err.message);
+    }
+  };
+
+  const filteredCategories = categories.filter(c =>
+    c.name.toLowerCase().includes(catSearch.toLowerCase()) ||
+    c.id.toLowerCase().includes(catSearch.toLowerCase())
+  );
+
   // PRODUCT CRUD ACTIONS
   const openAddModal = () => {
     setEditingProduct(null);
     setPName('');
     setPDescription('');
     setPPrice('');
-    setPCategory('Men');
+    setPCategory(categories.length > 0 ? categories[0].name : 'Men');
     setPImage('');
     setPStock('0');
     setPVariants([]);
@@ -411,6 +509,17 @@ export default function AdminDashboard() {
             <span>Overview</span>
           </button>
           <button
+            onClick={() => setActiveTab('categories')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'categories'
+                ? 'admin-pill-tab-active'
+                : 'admin-pill-tab'
+            }`}
+          >
+            <Tag className="h-4 w-4" />
+            <span>Categories</span>
+          </button>
+          <button
             onClick={() => setActiveTab('products')}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
               activeTab === 'products'
@@ -515,9 +624,9 @@ export default function AdminDashboard() {
                   const pct = stats.totalSales > 0 ? (amount / stats.totalSales) * 100 : 0;
                   return (
                     <div key={cat} className="space-y-1 text-xs">
-                      <div className="flex justify-between font-bold">
-                        <span className="text-slate-800 dark:text-slate-200">{cat}'s apparel</span>
-                        <span className="text-slate-500">${amount.toFixed(2)} ({pct.toFixed(0)}%)</span>
+                      <div className="flex justify-between gap-3 font-bold">
+                        <span className="text-brown-dark dark:text-slate-100">{cat}'s apparel</span>
+                        <span className="text-brown-primary dark:text-slate-200">${amount.toFixed(2)} ({pct.toFixed(0)}%)</span>
                       </div>
                       <div className="h-2.5 w-full bg-slate-100 rounded-full dark:bg-slate-800 overflow-hidden">
                         <div 
@@ -552,17 +661,16 @@ export default function AdminDashboard() {
                 <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
               </div>
 
-              {/* Local Category Filter */}
+              {/* Local Category Filter - dynamic from DB */}
               <select
                 value={productCatFilter}
                 onChange={(e) => setProductCatFilter(e.target.value)}
                 className="rounded-xl admin-theme-select py-2 px-3 text-xs font-semibold focus:outline-none"
               >
                 <option value="All">All Categories</option>
-                <option value="Men">Men</option>
-                <option value="Women">Women</option>
-                <option value="Kids">Kids</option>
-                <option value="Footwear">Footwear</option>
+                {categories.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
               </select>
             </div>
 
@@ -789,8 +897,219 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* -------------------- CATEGORIES TAB -------------------- */}
+      {activeTab === 'categories' && (
+        <div className="space-y-6">
+          {/* Summary Cards Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-sm flex items-center gap-4">
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                <Tag className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Total Categories</span>
+                <span className="text-2xl font-black text-slate-900 dark:text-white">{categories.length}</span>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-sm flex items-center gap-4">
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                <Shirt className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Categorized Products</span>
+                <span className="text-2xl font-black text-slate-900 dark:text-white">
+                  {categories.reduce((acc, c) => acc + (c.productCount || 0), 0)}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-sm flex items-center gap-4">
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-xl">
+                <FolderTree className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">System Status</span>
+                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Database Synced</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Row */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="relative w-full sm:w-72">
+              <input
+                type="text"
+                placeholder="Search categories..."
+                value={catSearch}
+                onChange={(e) => setCatSearch(e.target.value)}
+                className="w-full rounded-xl admin-theme-input py-2 pl-9 pr-4 text-xs font-semibold focus:outline-none"
+              />
+              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+            </div>
+
+            <button
+              onClick={openAddCategoryModal}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl admin-theme-action-btn px-4 py-2.5 text-xs font-bold shadow-sm transition-all cursor-pointer"
+            >
+              <Plus className="h-4.5 w-4.5" />
+              <span>Add New Category</span>
+            </button>
+          </div>
+
+          {/* Category Listing Table */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-950/60 border-b border-slate-100 dark:border-slate-850 uppercase tracking-widest text-[9px] text-slate-450 font-bold">
+                  <tr>
+                    <th className="px-6 py-4">Category Name</th>
+                    <th className="px-6 py-4">Category ID</th>
+                    <th className="px-6 py-4">Created Date</th>
+                    <th className="px-6 py-4 text-center">Products Count</th>
+                    <th className="px-6 py-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-850 font-semibold text-slate-700 dark:text-slate-300">
+                  {filteredCategories.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" className="px-6 py-10 text-center text-slate-500 font-normal">
+                        No categories found.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredCategories.map((cat) => (
+                      <tr key={cat.id} className="admin-theme-table-row transition-colors">
+                        <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                            <span>{cat.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-slate-450 font-mono text-[11px]">
+                          {cat.id}
+                        </td>
+                        <td className="px-6 py-4 text-slate-500">
+                          {cat.createdAt ? new Date(cat.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] ${
+                            cat.productCount > 0 
+                              ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400' 
+                              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                          }`}>
+                            {cat.productCount} product{cat.productCount !== 1 ? 's' : ''}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => openEditCategoryModal(cat)}
+                              className="p-1.5 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                              title="Edit Category"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleCategoryDelete(cat)}
+                              className={`p-1.5 transition-colors cursor-pointer rounded-lg ${
+                                cat.productCount > 0
+                                  ? 'text-slate-300 dark:text-slate-700 hover:text-rose-500'
+                                  : 'text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30'
+                              }`}
+                              title={cat.productCount > 0 ? "Category has assigned products (Cannot delete)" : "Delete Category"}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ==================== TAB 5: ACTIVITY LOGS ==================== */}
       {activeTab === 'logs' && <ActivityLogTab />}
+
+      {/* ==================== CATEGORY CRUD MODAL ==================== */}
+      {isCatModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                {editingCategory ? 'Edit Category' : 'Add New Category'}
+              </h3>
+              <button
+                onClick={() => setIsCatModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCategorySubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-200">Category Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Footwear, Accessories, Watches"
+                  value={catNameInput}
+                  onChange={(e) => setCatNameInput(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 px-3 focus:outline-none focus:border-brown-primary text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-600 text-xs font-semibold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-200">Card Image URL</label>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/..."
+                  value={catImageInput}
+                  onChange={(e) => setCatImageInput(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 px-3 focus:outline-none focus:border-brown-primary text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-600 text-xs font-semibold"
+                />
+                <p className="text-[10px] text-slate-400">This image appears on the Home page category card. Use an Unsplash URL for best results.</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-200">Card Subtitle</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Luxury & Sport, Sneakers & Loafers"
+                  value={catSubtitleInput}
+                  onChange={(e) => setCatSubtitleInput(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 px-3 focus:outline-none focus:border-brown-primary text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-600 text-xs font-semibold"
+                />
+                <p className="text-[10px] text-slate-400">Short tagline shown under the category name on the card.</p>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCatModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={catSubmitting}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {catSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  <span>{editingCategory ? 'Update Category' : 'Create Category'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ==================== PRODUCT CRUD MODAL ==================== */}
       {isModalOpen && (
@@ -1014,10 +1333,18 @@ export default function AdminDashboard() {
                     onChange={(e) => setPCategory(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 px-3 focus:outline-none focus:border-brown-primary text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                   >
-                    <option value="Men">Men</option>
-                    <option value="Women">Women</option>
-                    <option value="Kids">Kids</option>
-                    <option value="Footwear">Footwear</option>
+                    {categories.length > 0 ? (
+                      categories.map(c => (
+                        <option key={c.id} value={c.name}>{c.name}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Men">Men</option>
+                        <option value="Women">Women</option>
+                        <option value="Kids">Kids</option>
+                        <option value="Footwear">Footwear</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
