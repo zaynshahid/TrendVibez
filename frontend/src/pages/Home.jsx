@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Truck, RefreshCw, ShieldCheck } from 'lucide-react';
 import ProductCard from '../components/ProductCard.jsx';
+import ModelSlider from '../components/ModelSlider.jsx';
+import ProductNotificationModal from '../components/ProductNotificationModal.jsx';
 import { API_URL } from '../context/AuthContext.jsx';
 
 export default function Home() {
@@ -36,24 +38,17 @@ export default function Home() {
 
   return (
     <div className="page-shell" style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <motion.section initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="hero-panel" style={{ minHeight: '88vh', margin: '2rem', padding: '0' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.05fr 0.95fr', minHeight: '88vh' }}>
-          <div style={{ display: 'flex', alignItems: 'center', padding: '4rem 3rem', position: 'relative', zIndex: 2 }}>
-            <div style={{ maxWidth: '560px' }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', fontFamily: 'var(--font-sans)', fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--coffee)', borderBottom: '1px solid rgba(111,78,55,0.3)', paddingBottom: '0.35rem' }}>New Season Arrivals</div>
-              <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 'clamp(2.7rem, 5vw, 4.4rem)', fontWeight: 800, lineHeight: 1.08, color: 'var(--brown-dark)', marginBottom: '1.35rem' }}>Redefine Your Style,<br /><em style={{ fontStyle: 'italic', color: 'var(--coffee)' }}>Own Your Vibe.</em></h1>
-              <p style={{ fontFamily: 'var(--font-sans)', fontSize: '1rem', lineHeight: 1.9, color: 'var(--text-secondary)', marginBottom: '2.2rem', maxWidth: '440px' }}>Crafted for modern wardrobes with warm textures, elegant tailoring, and a quietly luxurious feel.</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-                <Link to="/products" className="btn-primary">Shop Collection <ArrowRight size={14} /></Link>
-                <a href="#categories" className="btn-outline">Explore Categories</a>
-              </div>
-            </div>
-          </div>
-          <div style={{ position: 'relative', overflow: 'hidden', borderTopRightRadius: '32px', borderBottomRightRadius: '32px' }}>
-            <img src="https://images.unsplash.com/photo-1483985988355-763728e1935b?w=900&auto=format&fit=crop&q=80" alt="Luxury fashion portrait" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top' }} />
-            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(255,255,255,0.02) 0%, rgba(59,42,34,0.14) 100%)' }} />
-          </div>
-        </div>
+      {/* Homepage Login Product Notification Modal */}
+      <ProductNotificationModal />
+
+      {/* Featured Model & Product Swiper Slider */}
+      <motion.section 
+        initial={{ opacity: 0, y: 20 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        transition={{ duration: 0.6 }} 
+        style={{ margin: '1.5rem 2rem 2rem' }}
+      >
+        <ModelSlider />
       </motion.section>
 
       <section style={{ backgroundColor: 'transparent', borderBottom: '1px solid rgba(221,209,195,0.4)' }}>

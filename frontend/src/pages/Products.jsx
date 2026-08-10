@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search, ArrowUpDown, Loader2, X,
-  Star, PackageCheck, DollarSign, RotateCcw
+  Star, PackageCheck, DollarSign, RotateCcw, Ruler
 } from 'lucide-react';
 import ProductCard from '../components/ProductCard.jsx';
 import { API_URL } from '../context/AuthContext.jsx';
@@ -77,6 +77,9 @@ export default function Products() {
   const [draftMaxPrice, setDraftMaxPrice] = useState('');
   const [draftMinRating, setDraftMinRating] = useState('');
   const [draftInStock, setDraftInStock] = useState(false);
+  const [draftSize, setDraftSize] = useState('');
+  const [sizeOptions, setSizeOptions] = useState([]);
+  const [sizeOptionsLoaded, setSizeOptionsLoaded] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState(searchParams.get('q') || '');
 
@@ -87,13 +90,15 @@ export default function Products() {
   const activeMaxPrice  = searchParams.get('maxPrice')   || '';
   const activeMinRating = searchParams.get('minRating')  || '';
   const activeInStock   = searchParams.get('inStock')    || '';
+  const activeSize      = searchParams.get('size')       || '';
 
   useEffect(() => {
     setDraftMinPrice(activeMinPrice);
     setDraftMaxPrice(activeMaxPrice);
     setDraftMinRating(activeMinRating);
     setDraftInStock(activeInStock === 'true');
-  }, [activeMinPrice, activeMaxPrice, activeMinRating, activeInStock]);
+    setDraftSize(activeSize);
+  }, [activeMinPrice, activeMaxPrice, activeMinRating, activeInStock, activeSize]);
 
   useEffect(() => {
     async function fetchFilteredProducts() {
@@ -107,6 +112,7 @@ export default function Products() {
         if (activeMaxPrice !== '') queryParts.push(`maxPrice=${encodeURIComponent(activeMaxPrice)}`);
         if (activeMinRating !== '') queryParts.push(`minRating=${encodeURIComponent(activeMinRating)}`);
         if (activeInStock === 'true') queryParts.push(`inStock=true`);
+        if (activeSize !== '') queryParts.push(`size=${encodeURIComponent(activeSize)}`);
         const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
         const res = await fetch(`${API_URL}/products${queryString}`);
         if (res.ok) {
@@ -120,7 +126,35 @@ export default function Products() {
       }
     }
     fetchFilteredProducts();
-  }, [activeCategory, activeSort, activeQuery, activeMinPrice, activeMaxPrice, activeMinRating, activeInStock]);
+  }, [activeCategory, activeSort, activeQuery, activeMinPrice, activeMaxPrice, activeMinRating, activeInStock, activeSize]);
+
+  useEffect(() => {
+    async function fetchSizeOptions() {
+      setSizeOptionsLoaded(false);
+      try {
+        const queryString = activeCategory && activeCategory !== 'All'
+          ? `?category=${encodeURIComponent(activeCategory)}`
+          : '';
+        const res = await fetch(`${API_URL}/products/meta/sizes${queryString}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSizeOptions(Array.isArray(data) ? data : []);
+        }
+      } catch (err) {
+        console.error('Failed to load size filter options:', err);
+        setSizeOptions([]);
+      } finally {
+        setSizeOptionsLoaded(true);
+      }
+    }
+    fetchSizeOptions();
+  }, [activeCategory]);
+
+  useEffect(() => {
+    if (activeSize && sizeOptionsLoaded && !sizeOptions.some(size => size.toLowerCase() === activeSize.toLowerCase())) {
+      updateParam('size', '');
+    }
+  }, [activeSize, sizeOptions, sizeOptionsLoaded]);
 
   const updateParam = (key, value) => {
     const newParams = new URLSearchParams(searchParams);
@@ -140,13 +174,14 @@ export default function Products() {
     if (draftMaxPrice !== '') newParams.set('maxPrice', draftMaxPrice); else newParams.delete('maxPrice');
     if (draftMinRating !== '') newParams.set('minRating', draftMinRating); else newParams.delete('minRating');
     if (draftInStock) newParams.set('inStock', 'true'); else newParams.delete('inStock');
+    if (draftSize !== '') newParams.set('size', draftSize); else newParams.delete('size');
     setSearchParams(newParams);
   };
 
   const resetAdvancedFilters = () => {
-    setDraftMinPrice(''); setDraftMaxPrice(''); setDraftMinRating(''); setDraftInStock(false);
+    setDraftMinPrice(''); setDraftMaxPrice(''); setDraftMinRating(''); setDraftInStock(false); setDraftSize('');
     const newParams = new URLSearchParams(searchParams);
-    ['minPrice','maxPrice','minRating','inStock'].forEach(k => newParams.delete(k));
+    ['minPrice','maxPrice','minRating','inStock','size'].forEach(k => newParams.delete(k));
     setSearchParams(newParams);
   };
 
@@ -168,7 +203,7 @@ export default function Products() {
   }, []);
 
   const resetAllFilters = () => {
-    setSearchTerm(''); setDraftMinPrice(''); setDraftMaxPrice(''); setDraftMinRating(''); setDraftInStock(false);
+    setSearchTerm(''); setDraftMinPrice(''); setDraftMaxPrice(''); setDraftMinRating(''); setDraftInStock(false); setDraftSize('');
     setSearchParams({});
   };
 
@@ -194,6 +229,7 @@ export default function Products() {
   if (activeMaxPrice) activeFilterChips.push({ label: `Max $${activeMaxPrice}`, key: 'maxPrice' });
   if (activeMinRating) activeFilterChips.push({ label: `${activeMinRating}+ ★`, key: 'minRating' });
   if (activeInStock === 'true') activeFilterChips.push({ label: 'In Stock', key: 'inStock' });
+  if (activeSize) activeFilterChips.push({ label: `Size: ${activeSize}`, key: 'size' });
 
   const inputStyle = {
     width: '100%',
@@ -443,6 +479,28 @@ export default function Products() {
                     onChange={(v) => setDraftMinRating(v === 0 ? '' : String(v))}
                   />
                 </div>
+
+                {/* Size */}
+                {(sizeOptions.length > 0 || draftSize) && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                      <Ruler size={13} style={{ color: 'var(--brown-primary)' }} />
+                      <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.05em' }}>Size</span>
+                    </div>
+                    <select
+                      id="filter-size-select"
+                      value={draftSize}
+                      onChange={(e) => setDraftSize(e.target.value)}
+                      className="products-input"
+                      style={{ ...inputStyle, cursor: 'pointer' }}
+                    >
+                      <option value="">Any size</option>
+                      {sizeOptions.map((size) => (
+                        <option key={size} value={size}>{size}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* In Stock */}
                 <div>

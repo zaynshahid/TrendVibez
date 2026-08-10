@@ -14,7 +14,8 @@
     "lucide-react": "^0.479.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.1.5"
+    "react-router-dom": "^7.1.5",
+    "swiper": "^14.1.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

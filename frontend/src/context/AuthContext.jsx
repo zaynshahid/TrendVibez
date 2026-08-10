@@ -2,7 +2,8 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 
 const AuthContext = createContext(null);
 
-export const API_URL = 'http://localhost:5000/api';
+const apiHost = window.location.hostname || 'localhost';
+export const API_URL = import.meta.env.VITE_API_URL || `http://${apiHost}:5000/api`;
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -64,6 +65,8 @@ export function AuthProvider({ children }) {
     localStorage.setItem('tv_token', data.token);
     setToken(data.token);
     setUser(data.user);
+    // Reset notification flag so popup shows on every fresh login
+    sessionStorage.removeItem('has_seen_login_notification');
     return data.user;
   };
 
@@ -100,11 +103,15 @@ export function AuthProvider({ children }) {
     localStorage.setItem('tv_token', data.token);
     setToken(data.token);
     setUser(data.user);
+    // Reset notification flag so popup shows on every fresh login
+    sessionStorage.removeItem('has_seen_login_notification');
     return data.user;
   };
 
   const logout = () => {
     localStorage.removeItem('tv_token');
+    // Clear notification flag so popup shows again on next login
+    sessionStorage.removeItem('has_seen_login_notification');
     setToken(null);
     setUser(null);
   };

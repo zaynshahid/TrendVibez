@@ -28,7 +28,12 @@ export default function Footer() {
           <div>
             <h4 style={{ fontFamily: 'var(--font-sans)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--warm-gray)', marginBottom: '1.25rem' }}>Customer Support</h4>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {[{ to: '/about', label: 'Our Story', isLink: true }, { label: 'Free 30-Day Returns' }, { label: 'Standard Shipping: 3–5 days' }, { label: 'Simulated Secure Payment' }].map(({ to, label, isLink }, i) => isLink ? <li key={i}><Link to={to} style={{ fontFamily: 'var(--font-sans)', fontSize: '0.8rem', color: 'var(--beige)', textDecoration: 'none', transition: 'color 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.color = 'var(--bg-primary)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--beige)'}>{label}</Link></li> : <li key={i} style={{ fontFamily: 'var(--font-sans)', fontSize: '0.8rem', color: 'var(--warm-gray)' }}>{label}</li>)}
+              {[
+                { to: '/about', label: 'Our Story', isLink: true },
+                { to: '/support', label: 'Help & Support', isLink: true },
+                { label: 'Free 30-Day Returns' },
+                { label: 'Standard Shipping: 3–5 days' }
+              ].map(({ to, label, isLink }, i) => isLink ? <li key={i}><Link to={to} style={{ fontFamily: 'var(--font-sans)', fontSize: '0.8rem', color: 'var(--beige)', textDecoration: 'none', transition: 'color 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.color = 'var(--bg-primary)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--beige)'}>{label}</Link></li> : <li key={i} style={{ fontFamily: 'var(--font-sans)', fontSize: '0.8rem', color: 'var(--warm-gray)' }}>{label}</li>)}
             </ul>
           </div>
 

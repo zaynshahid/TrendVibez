@@ -26,6 +26,7 @@ import Payment from './pages/Payment.jsx';
 import Receipt from './pages/Receipt.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
+import Support from './pages/Support.jsx';
 
 export default function App() {
   return (
@@ -48,6 +49,7 @@ export default function App() {
                 <Route path="/products" element={<Products />} />
                 <Route path="/products/:id" element={<ProductDetail />} />
                 <Route path="/cart" element={<Cart />} />
+                <Route path="/support" element={<Support />} />
 
                 {/* 2. Authentication Routes */}
                 <Route path="/login" element={<Login />} />

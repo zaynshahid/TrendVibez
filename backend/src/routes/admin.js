@@ -1,9 +1,43 @@
 import express from 'express';
-import { getAdminStats, getAllUsers, findUserById, updateUser, deleteUser, clearCart } from '../db.js';
+import { getAdminStats, getAllUsers, findUserById, updateUser, deleteUser, clearCart, getFeaturedNotificationSetting, updateFeaturedNotificationSetting } from '../db.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = express.Router();
+
+// GET FEATURED NOTIFICATION SETTING (Public for homepage popup)
+router.get('/settings/featured-notification', async (req, res) => {
+  try {
+    const setting = await getFeaturedNotificationSetting();
+    res.json(setting);
+  } catch (error) {
+    console.error('Get featured notification error:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// UPDATE FEATURED NOTIFICATION SETTING (Admin Protected)
+router.put('/settings/featured-notification', requireAdmin, async (req, res) => {
+  try {
+    const { enabled, productId } = req.body;
+    const updated = await updateFeaturedNotificationSetting(enabled, productId);
+
+    logActivity({
+      adminId: req.user.id,
+      adminName: req.user.name,
+      action: 'UPDATE_FEATURED_NOTIFICATION',
+      module: 'settings',
+      recordId: productId || 'auto',
+      newData: { enabled, productId },
+      ipAddress: getClientIp(req)
+    });
+
+    res.json({ message: 'Notification settings updated successfully', setting: updated });
+  } catch (error) {
+    console.error('Update featured notification error:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
 
 // GET SALES & ORDERS STATS
 router.get('/stats', requireAdmin, async (req, res) => {

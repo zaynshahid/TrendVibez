@@ -1,6 +1,6 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { getAllProducts, getProductById, createProduct, updateProduct, deleteProduct } from '../db.js';
+import { getAllProducts, getProductById, createProduct, updateProduct, deleteProduct, getProductSizeOptions } from '../db.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
@@ -8,12 +8,24 @@ const router = express.Router();
 
 // GET ALL PRODUCTS (with filtering, sorting, searching)
 router.get('/', async (req, res) => {
-  const { category, q, sort, minPrice, maxPrice, minRating, inStock } = req.query;
+  const { category, q, sort, minPrice, maxPrice, minRating, inStock, size } = req.query;
   try {
-    const products = await getAllProducts({ category, q, sort, minPrice, maxPrice, minRating, inStock });
+    const products = await getAllProducts({ category, q, sort, minPrice, maxPrice, minRating, inStock, size });
     res.json(products);
   } catch (error) {
     console.error('Get products error:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// GET SIZE OPTIONS (derived from product size variants, optionally by category)
+router.get('/meta/sizes', async (req, res) => {
+  const { category } = req.query;
+  try {
+    const sizes = await getProductSizeOptions({ category });
+    res.json(sizes);
+  } catch (error) {
+    console.error('Get product size options error:', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });

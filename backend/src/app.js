@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import { initDb } from './db.js';
 
 // Import route handlers
 import authRoutes from './routes/auth.js';
@@ -13,9 +12,6 @@ import activityLogsRoutes from './routes/activityLogs.js';
 import categoryRoutes from './routes/categories.js';
 
 const app = express();
-
-// Initialize JSON database storage
-initDb();
 
 // Global Middlewares
 app.use(cors({

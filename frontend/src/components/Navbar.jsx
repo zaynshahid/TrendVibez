@@ -61,6 +61,7 @@ export default function Navbar() {
               <NavLink to="/" end className={navLinkClass}>Home</NavLink>
               <NavLink to="/products" className={navLinkClass}>Collection</NavLink>
               <NavLink to="/about" className={navLinkClass}>Our Story</NavLink>
+              <NavLink to="/support" className={navLinkClass}>Support</NavLink>
             </div>
 
             <div className="hidden md:flex" style={{ alignItems: 'center', gap: '1.1rem' }}>
@@ -92,6 +93,7 @@ export default function Navbar() {
             <NavLink to="/" end onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Home</NavLink>
             <NavLink to="/products" onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Collection</NavLink>
             <NavLink to="/about" onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Our Story</NavLink>
+            <NavLink to="/support" onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Support</NavLink>
 
             <div style={{ padding: '1rem 1rem 0', borderTop: '1px solid var(--border-subtle)', marginTop: '0.5rem' }}>
               {user ? (

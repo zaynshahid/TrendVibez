@@ -19,9 +19,14 @@ import {
   Shirt,
   Activity,
   Tag,
-  FolderTree
+  FolderTree,
+  Bell,
+  BellOff,
+  Eye,
+  Save
 } from 'lucide-react';
 import ActivityLogTab from '../components/ActivityLogTab.jsx';
+import ProductNotificationModal from '../components/ProductNotificationModal.jsx';
 
 export default function AdminDashboard() {
   const { token, user: activeAdmin } = useAuth();
@@ -63,6 +68,13 @@ export default function AdminDashboard() {
   const [pVariants, setPVariants] = useState([]);
   const [pVariantType, setPVariantType] = useState('color'); // 'color' | 'size'
 
+  // Homepage notification settings states
+  const [notifEnabled, setNotifEnabled] = useState(true);
+  const [notifProductId, setNotifProductId] = useState('');
+  const [notifProductSearch, setNotifProductSearch] = useState('');
+  const [notifSaving, setNotifSaving] = useState(false);
+  const [notifPreviewOpen, setNotifPreviewOpen] = useState(false);
+
   // Products filter state
   const [productSearch, setProductSearch] = useState('');
   const [productCatFilter, setProductCatFilter] = useState('All');
@@ -89,13 +101,42 @@ export default function AdminDashboard() {
           .then(data => setUsers(data)),
         fetch(`${API_URL}/categories`)
           .then(r => r.ok ? r.json() : [])
-          .then(data => setCategories(data))
+          .then(data => setCategories(data)),
+        fetch(`${API_URL}/admin/settings/featured-notification`, { headers })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (data) {
+              setNotifEnabled(data.enabled);
+              setNotifProductId(data.productId || '');
+            }
+          })
       ]);
     } catch (err) {
       console.error(err);
       setErrorMsg(err.message || 'An error occurred fetching dashboard logs.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Save notification settings
+  const saveNotifSettings = async () => {
+    setNotifSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/settings/featured-notification`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ enabled: notifEnabled, productId: notifProductId })
+      });
+      if (res.ok) {
+        triggerSuccess('Homepage notification settings saved successfully!');
+      } else {
+        triggerError('Failed to save notification settings.');
+      }
+    } catch (err) {
+      triggerError('Network error saving notification settings.');
+    } finally {
+      setNotifSaving(false);
     }
   };
 
@@ -338,6 +379,22 @@ export default function AdminDashboard() {
     }
   };
 
+  const getOrderStatusBadgeClass = (status) => {
+    switch (status) {
+      case 'Processing':
+        return 'bg-sky-50 text-sky-700 border-sky-200';
+      case 'Shipped':
+        return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'Delivered':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'Cancelled':
+        return 'bg-rose-50 text-rose-700 border-rose-200';
+      case 'Pending':
+      default:
+        return 'bg-amber-50 text-amber-700 border-amber-200';
+    }
+  };
+
   // USER ACTIONS
   const handleUserRoleUpdate = async (userId, currentRole) => {
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
@@ -563,6 +620,17 @@ export default function AdminDashboard() {
             <Activity className="h-4 w-4" />
             <span>Activity Logs</span>
           </button>
+          <button
+            onClick={() => setActiveTab('notification')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'notification'
+                ? 'admin-pill-tab-active'
+                : 'admin-pill-tab'
+            }`}
+          >
+            <Bell className="h-4 w-4" />
+            <span>Notifications</span>
+          </button>
         </div>
       </div>
 
@@ -772,14 +840,14 @@ export default function AdminDashboard() {
         <div className="space-y-6">
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[860px] text-left text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-950/60 border-b border-slate-100 dark:border-slate-850 uppercase tracking-widest text-[9px] text-slate-450 font-bold">
                   <tr>
                     <th className="px-6 py-4">Order Ref</th>
                     <th className="px-6 py-4">Client Detail</th>
                     <th className="px-6 py-4">Amount</th>
-                    <th className="px-6 py-4">Status & Dispatch</th>
-                    <th className="px-6 py-4 text-center">Actions</th>
+                    <th className="sticky right-[76px] z-10 bg-slate-50 dark:bg-slate-950/60 px-6 py-4 min-w-[230px] shadow-[-12px_0_18px_-20px_rgba(15,23,42,0.8)]">Status & Dispatch</th>
+                    <th className="sticky right-0 z-10 bg-slate-50 dark:bg-slate-950/60 px-6 py-4 text-center min-w-[76px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-850 font-semibold text-slate-700 dark:text-slate-300">
@@ -802,12 +870,16 @@ export default function AdminDashboard() {
                           <span className="text-[10px] text-slate-450 font-normal line-clamp-1 max-w-[200px]">{o.address}</span>
                         </td>
                         <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">${o.totalAmount.toFixed(2)}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
+                        <td className="sticky right-[76px] z-10 bg-white dark:bg-slate-900 px-6 py-4 min-w-[230px] shadow-[-12px_0_18px_-20px_rgba(15,23,42,0.8)]">
+                          <div className="flex flex-col gap-2">
+                            <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${getOrderStatusBadgeClass(o.status)}`}>
+                              {o.status}
+                            </span>
                             <select
                               value={o.status}
                               onChange={(e) => handleOrderStatusUpdate(o.id, e.target.value)}
-                              className="rounded-lg border border-slate-200 bg-white py-1 px-2.5 text-xs font-semibold focus:outline-none dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-200"
+                              className="w-full rounded-lg border border-slate-200 bg-white py-2 px-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brown-primary/20 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                              aria-label={`Dispatch status for order ${o.orderReference || o.id}`}
                             >
                               <option value="Pending">Pending</option>
                               <option value="Processing">Processing</option>
@@ -817,7 +889,7 @@ export default function AdminDashboard() {
                             </select>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-center">
+                        <td className="sticky right-0 z-10 bg-white dark:bg-slate-900 px-6 py-4 text-center min-w-[76px]">
                           <button
                             onClick={() => handleOrderDelete(o.id)}
                             className="rounded p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors"
@@ -1035,6 +1107,216 @@ export default function AdminDashboard() {
 
       {/* ==================== TAB 5: ACTIVITY LOGS ==================== */}
       {activeTab === 'logs' && <ActivityLogTab />}
+
+      {/* ==================== TAB 6: HOMEPAGE NOTIFICATION SETTINGS ==================== */}
+      {activeTab === 'notification' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1.5rem' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+                <Bell size={20} style={{ color: 'var(--brown-primary)' }} />
+                Homepage Login Notification
+              </h2>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                Control which product popup appears when a user logs in for the first time in a session.
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <button
+                onClick={() => setNotifPreviewOpen(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1.1rem', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-primary)'}
+              >
+                <Eye size={15} /> Preview Popup
+              </button>
+              <button
+                onClick={saveNotifSettings}
+                disabled={notifSaving}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1.3rem', borderRadius: '10px', border: 'none', background: 'var(--brown-primary)', color: '#fff', fontSize: '0.78rem', fontWeight: 700, cursor: notifSaving ? 'not-allowed' : 'pointer', opacity: notifSaving ? 0.65 : 1, transition: 'all 0.2s' }}
+              >
+                {notifSaving ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={15} />}
+                {notifSaving ? 'Saving...' : 'Save Settings'}
+              </button>
+            </div>
+          </div>
+
+          {/* Toggle Card */}
+          <div style={{ background: 'var(--bg-card)', border: '1.5px solid var(--border-color)', borderRadius: '16px', padding: '1.25rem 1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: notifEnabled ? 'rgba(90,122,82,0.12)' : 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {notifEnabled
+                    ? <Bell size={20} style={{ color: '#5A7A52' }} />
+                    : <BellOff size={20} style={{ color: 'var(--text-muted)' }} />
+                  }
+                </div>
+                <div>
+                  <p style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.2rem' }}>
+                    {notifEnabled ? '✅ Notification Popup is Enabled' : '🔕 Notification Popup is Disabled'}
+                  </p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                    {notifEnabled
+                      ? 'Users will see the popup once per session after login.'
+                      : 'No popup will appear for any user on the homepage.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Toggle Switch */}
+              <button
+                onClick={() => setNotifEnabled(v => !v)}
+                style={{
+                  position: 'relative',
+                  width: '52px',
+                  height: '28px',
+                  borderRadius: '999px',
+                  border: 'none',
+                  background: notifEnabled ? '#5A7A52' : '#B8A99A',
+                  cursor: 'pointer',
+                  transition: 'background 0.3s ease',
+                  flexShrink: 0,
+                  padding: 0,
+                }}
+                title={notifEnabled ? 'Click to disable' : 'Click to enable'}
+              >
+                <span style={{
+                  position: 'absolute',
+                  top: '3px',
+                  left: notifEnabled ? '26px' : '3px',
+                  width: '22px',
+                  height: '22px',
+                  borderRadius: '50%',
+                  background: '#fff',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+                  transition: 'left 0.3s ease',
+                  display: 'block',
+                }} />
+              </button>
+            </div>
+          </div>
+
+          {/* Product Selection Card */}
+          <div style={{ background: 'var(--bg-card)', border: '1.5px solid var(--border-color)', borderRadius: '16px', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div>
+              <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>Featured Product Selection</h3>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                Choose which product to show in the popup. Leave on "Automatic" to always show the newest product.
+              </p>
+            </div>
+
+            {/* Auto-mode option */}
+            <div
+              onClick={() => setNotifProductId('')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem',
+                borderRadius: '12px', border: `2px solid ${!notifProductId ? 'var(--brown-primary)' : 'var(--border-color)'}`,
+                background: !notifProductId ? 'rgba(111,78,55,0.07)' : 'var(--bg-primary)',
+                cursor: 'pointer', transition: 'all 0.2s',
+              }}
+            >
+              <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: 'rgba(111,78,55,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <TrendingUp size={16} style={{ color: 'var(--brown-primary)' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>Automatic — Show Newest Product</p>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Automatically picks the most recently added product.</p>
+              </div>
+              {!notifProductId && <CheckCircle2 size={18} style={{ color: 'var(--brown-primary)', flexShrink: 0 }} />}
+            </div>
+
+            {/* Search bar */}
+            <div style={{ position: 'relative' }}>
+              <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                placeholder="Search products to feature..."
+                value={notifProductSearch}
+                onChange={e => setNotifProductSearch(e.target.value)}
+                style={{ width: '100%', paddingLeft: '36px', paddingRight: '12px', paddingTop: '0.6rem', paddingBottom: '0.6rem', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            {/* Product list */}
+            <div style={{ maxHeight: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.4rem', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '0.5rem' }}>
+              {products
+                .filter(p =>
+                  !notifProductSearch ||
+                  p.name.toLowerCase().includes(notifProductSearch.toLowerCase()) ||
+                  p.category.toLowerCase().includes(notifProductSearch.toLowerCase())
+                )
+                .map(product => (
+                  <div
+                    key={product.id}
+                    onClick={() => setNotifProductId(product.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.65rem 0.75rem',
+                      borderRadius: '10px', cursor: 'pointer', transition: 'all 0.15s',
+                      border: `1.5px solid ${notifProductId === product.id ? 'var(--brown-primary)' : 'transparent'}`,
+                      background: notifProductId === product.id ? 'rgba(111,78,55,0.07)' : 'transparent',
+                    }}
+                    onMouseEnter={e => { if (notifProductId !== product.id) e.currentTarget.style.background = 'var(--bg-secondary)'; }}
+                    onMouseLeave={e => { if (notifProductId !== product.id) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      style={{ width: '42px', height: '42px', borderRadius: '8px', objectFit: 'cover', background: 'var(--bg-secondary)', flexShrink: 0 }}
+                      onError={e => { e.target.style.display = 'none'; }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{product.name}</p>
+                      <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{product.category} · ${parseFloat(product.price).toFixed(2)}</p>
+                    </div>
+                    {notifProductId === product.id && <CheckCircle2 size={16} style={{ color: 'var(--brown-primary)', flexShrink: 0 }} />}
+                  </div>
+                ))
+              }
+              {products.filter(p =>
+                !notifProductSearch ||
+                p.name.toLowerCase().includes(notifProductSearch.toLowerCase()) ||
+                p.category.toLowerCase().includes(notifProductSearch.toLowerCase())
+              ).length === 0 && (
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1.5rem' }}>No products found.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Currently Selected Banner */}
+          {notifProductId && (() => {
+            const selected = products.find(p => p.id === notifProductId);
+            if (!selected) return null;
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem 1.25rem', borderRadius: '14px', border: '1.5px solid rgba(90,122,82,0.4)', background: 'rgba(90,122,82,0.06)' }}>
+                <img src={selected.image} alt={selected.name} style={{ width: '52px', height: '52px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '0.68rem', fontWeight: 700, color: '#5A7A52', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.2rem' }}>✓ Currently Selected for Popup</p>
+                  <p style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)' }}>{selected.name}</p>
+                  <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>{selected.category} · ${parseFloat(selected.price).toFixed(2)}</p>
+                </div>
+                <button
+                  onClick={() => setNotifProductId('')}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px', borderRadius: '6px', display: 'flex', alignItems: 'center' }}
+                  title="Remove selection"
+                  onMouseEnter={e => e.currentTarget.style.color = 'var(--error)'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Notification Preview Modal */}
+      {notifPreviewOpen && (
+        <ProductNotificationModal
+          forceShow={true}
+          onClose={() => setNotifPreviewOpen(false)}
+        />
+      )}
 
       {/* ==================== CATEGORY CRUD MODAL ==================== */}
       {isCatModalOpen && (

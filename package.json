@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "backend": "npm.cmd --prefix backend run dev",
+    "frontend": "npm.cmd --prefix frontend run dev",
+    "frontend:host": "npm.cmd --prefix frontend run dev -- --host 0.0.0.0"
+  },
   "dependencies": {
     "mysql2": "^3.23.1",
     "nodemailer": "^9.0.3"

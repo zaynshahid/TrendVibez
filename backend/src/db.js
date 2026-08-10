@@ -50,6 +50,7 @@ export async function initDb() {
     await createTables();
 
     // 4. Seed tables
+    await seedSettings();
     await seedAdmin();
     await seedProducts();
     await seedCategories();
@@ -225,6 +226,37 @@ async function createTables() {
       createdAt VARCHAR(50) NOT NULL
     )
   `);
+
+  // Site settings table
+  await query(`
+    CREATE TABLE IF NOT EXISTS site_settings (
+      setting_key VARCHAR(100) PRIMARY KEY,
+      setting_value TEXT,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Support queries table
+  await query(`
+    CREATE TABLE IF NOT EXISTS support_queries (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      category VARCHAR(100) NOT NULL,
+      message TEXT NOT NULL,
+      status VARCHAR(50) DEFAULT 'Pending',
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+}
+
+export async function seedSettings() {
+  try {
+    await query(`INSERT IGNORE INTO site_settings (setting_key, setting_value) VALUES ('notification_enabled', 'true')`);
+    await query(`INSERT IGNORE INTO site_settings (setting_key, setting_value) VALUES ('notification_product_id', '')`);
+  } catch (e) {
+    console.error('Error seeding site settings:', e);
+  }
 }
 
 async function seedAdmin() {
@@ -511,7 +543,46 @@ async function syncProductSizeInventory(productId, variants = []) {
   }
 }
 
-export async function getAllProducts({ category, q, sort, minPrice, maxPrice, minRating, inStock } = {}) {
+function sortSizeNames(sizeNames) {
+  return sizeNames.sort((a, b) => {
+    const aNum = Number(a);
+    const bNum = Number(b);
+    if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return aNum - bNum;
+    if (!Number.isNaN(aNum)) return -1;
+    if (!Number.isNaN(bNum)) return 1;
+
+    const order = ['xxs', 'xs', 'small', 's', 'medium', 'm', 'large', 'l', 'xl', 'xxl', 'one size'];
+    const aIndex = order.indexOf(a.toLowerCase());
+    const bIndex = order.indexOf(b.toLowerCase());
+    if (aIndex !== -1 || bIndex !== -1) {
+      if (aIndex === -1) return 1;
+      if (bIndex === -1) return -1;
+      return aIndex - bIndex;
+    }
+
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
+export async function getProductSizeOptions({ category } = {}) {
+  let sql = `
+    SELECT DISTINCT psi.sizeName
+    FROM product_size_inventory psi
+    INNER JOIN products p ON p.id = psi.productId
+    WHERE psi.sizeName <> ''
+  `;
+  const params = [];
+
+  if (category) {
+    sql += ' AND LOWER(p.category) = LOWER(?)';
+    params.push(category);
+  }
+
+  const rows = await query(sql, params);
+  return sortSizeNames(rows.map(row => row.sizeName));
+}
+
+export async function getAllProducts({ category, q, sort, minPrice, maxPrice, minRating, inStock, size } = {}) {
   let sql = 'SELECT * FROM products WHERE 1=1';
   const params = [];
 
@@ -543,6 +614,17 @@ export async function getAllProducts({ category, q, sort, minPrice, maxPrice, mi
 
   if (inStock === 'true' || inStock === true) {
     sql += ' AND stock > 0';
+  }
+
+  if (size !== undefined && size !== '') {
+    sql += ` AND EXISTS (
+      SELECT 1
+      FROM product_size_inventory psi
+      WHERE psi.productId = products.id
+        AND LOWER(psi.sizeName) = LOWER(?)
+        ${inStock === 'true' || inStock === true ? 'AND psi.stock > 0' : ''}
+    )`;
+    params.push(size);
   }
 
   if (sort) {
@@ -1179,4 +1261,81 @@ export async function deleteCategory(id) {
   await query('DELETE FROM categories WHERE id = ?', [id]);
   return { success: true, message: `Category "${category.name}" deleted successfully.` };
 }
+
+export async function getFeaturedNotificationSetting() {
+  const rows = await query('SELECT setting_key, setting_value FROM site_settings WHERE setting_key IN (?, ?)', [
+    'notification_enabled',
+    'notification_product_id'
+  ]);
+  
+  let enabled = true;
+  let productId = '';
+
+  rows.forEach(row => {
+    if (row.setting_key === 'notification_enabled') {
+      enabled = row.setting_value === 'true';
+    }
+    if (row.setting_key === 'notification_product_id') {
+      productId = row.setting_value || '';
+    }
+  });
+
+  let product = null;
+  if (productId) {
+    product = await getProductById(productId);
+  }
+  
+  // If no explicit product found/selected, default to newest product
+  if (!product) {
+    const newest = await query('SELECT id FROM products ORDER BY createdAt DESC LIMIT 1');
+    if (newest && newest[0]) {
+      product = await getProductById(newest[0].id);
+    }
+  }
+
+  return {
+    enabled,
+    productId,
+    product
+  };
+}
+
+export async function updateFeaturedNotificationSetting(enabled, productId = '') {
+  await query('INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?', [
+    'notification_enabled',
+    enabled ? 'true' : 'false',
+    enabled ? 'true' : 'false'
+  ]);
+
+  await query('INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?', [
+    'notification_product_id',
+    productId || '',
+    productId || ''
+  ]);
+
+  return getFeaturedNotificationSetting();
+}
+
+export async function createSupportQuery({ name, email, category, message }) {
+  const result = await query(
+    'INSERT INTO support_queries (name, email, category, message, status) VALUES (?, ?, ?, ?, ?)',
+    [name, email, category, message, 'Pending']
+  );
+  return { id: result.insertId, name, email, category, message, status: 'Pending', createdAt: new Date() };
+}
+
+export async function getAllSupportQueries() {
+  return await query('SELECT * FROM support_queries ORDER BY createdAt DESC');
+}
+
+export async function updateSupportQueryStatus(id, status) {
+  await query('UPDATE support_queries SET status = ? WHERE id = ?', [status, id]);
+  const rows = await query('SELECT * FROM support_queries WHERE id = ?', [id]);
+  return rows[0];
+}
+
+export async function deleteSupportQuery(id) {
+  await query('DELETE FROM support_queries WHERE id = ?', [id]);
+}
+
 
