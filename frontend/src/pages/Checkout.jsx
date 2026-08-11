@@ -136,25 +136,25 @@ export default function Checkout() {
           <h2 className="text-lg font-bold text-brown-dark">Order Summary</h2>
 
           {/* Cart items preview */}
-          <div className="divide-y divide-slate-100 dark:divide-slate-850 max-h-60 overflow-y-auto no-scrollbar">
+          <div className="divide-y divide-brown-faint max-h-60 overflow-y-auto no-scrollbar">
             {cart.map((item) => {
               const sizeLabel = item.selectedColor || item.variant?.color;
               return (
                 <div key={`${item.productId}-${item.variantId || ''}`} className="flex justify-between py-3 text-xs">
                   <div className="space-y-0.5">
-                    <span className="font-semibold text-brown-dark dark:text-slate-100 block">
+                    <span className="font-bold text-brown-dark block">
                       {item.product?.name}
                     </span>
                     {sizeLabel && (
-                      <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block">
+                      <span className="text-[10px] font-bold text-brown-primary block">
                         Size: {sizeLabel}
                       </span>
                     )}
-                    <span className="text-text-secondary">
+                    <span className="font-semibold text-brown-dark/80">
                       Qty: {item.quantity} &times; ${item.product?.price?.toFixed(2)}
                     </span>
                   </div>
-                  <span className="font-bold text-slate-850 dark:text-slate-200">
+                  <span className="font-extrabold text-brown-dark">
                     ${((item.product?.price || 0) * item.quantity).toFixed(2)}
                   </span>
                 </div>
@@ -163,16 +163,16 @@ export default function Checkout() {
           </div>
 
           {/* Pricing totals */}
-          <div className="space-y-3 border-t border-slate-100 dark:border-slate-850 pt-4 text-sm">
-            <div className="flex justify-between text-text-secondary">
+          <div className="space-y-3 border-t border-brown-faint pt-4 text-sm">
+            <div className="flex justify-between font-semibold text-brown-dark/85">
               <span>Subtotal</span>
-              <span className="font-semibold text-brown-dark dark:text-slate-250">${cartTotal.toFixed(2)}</span>
+              <span className="font-bold text-brown-dark">${cartTotal.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-text-secondary">
+            <div className="flex justify-between font-semibold text-brown-dark/85">
               <span>Shipping</span>
-              <span className="text-olive font-semibold">FREE</span>
+              <span className="text-olive font-bold">FREE</span>
             </div>
-            <div className="flex justify-between items-baseline text-brown-dark dark:text-white border-t border-slate-100 dark:border-slate-850 pt-3">
+            <div className="flex justify-between items-baseline text-brown-dark border-t border-brown-faint pt-3">
               <span className="text-base font-bold">Total Due</span>
               <span className="text-2xl font-black">${cartTotal.toFixed(2)}</span>
             </div>

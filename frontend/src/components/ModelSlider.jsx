@@ -36,7 +36,7 @@ const slides = [
     subtitle: 'Elevate your daily ensemble with rich leather bags and signature gold accents.',
     image: '/images/slider/slide3.jpg',
     badge: 'Best Seller',
-    link: '/products?category=Accessories'
+    link: '/products'
   },
   {
     id: 4,

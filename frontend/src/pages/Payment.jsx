@@ -121,7 +121,7 @@ export default function Payment() {
         </LiquidGlassButton>
       </div>
 
-      <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+      <h1 className="text-3xl font-extrabold tracking-tight text-brown-dark">
         Payment Gateway
       </h1>
 
@@ -129,12 +129,12 @@ export default function Payment() {
         {/* Payment Form */}
         <div className="lg:col-span-2 payment-panel p-6 rounded-3xl relative overflow-hidden shadow-sm">
           {processing && (
-            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/90 dark:bg-slate-950/90 backdrop-blur-xs space-y-4">
-              <div className="h-10 w-10 animate-spin rounded-full border-4 border-brown-primary border-t-transparent"></div>
-              <p className="text-sm font-bold text-brown-dark dark:text-white">
+            <div className="fixed inset-0 z-50 flex flex-col items-center justify-center theme-loading-screen backdrop-blur-xs space-y-4">
+              <div className="theme-loading-spinner"></div>
+              <p className="text-sm font-bold text-brown-dark">
                 {paymentMethod === 'cod' ? 'Placing your order...' : 'Processing simulated transaction...'}
               </p>
-              <p className="text-xs text-text-secondary">Please do not refresh or close this window.</p>
+              <p className="text-xs font-semibold text-brown-dark/80">Please do not refresh or close this window.</p>
             </div>
           )}
 
@@ -149,18 +149,18 @@ export default function Payment() {
                 onClick={() => { setPaymentMethod('card'); setErrorMsg(''); }}
                 className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 transition-all duration-200 cursor-pointer
                   ${paymentMethod === 'card'
-                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 shadow-md'
-                    : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 hover:border-indigo-300 dark:hover:border-indigo-700'
+                    ? 'border-brown-primary bg-brown-faint shadow-md'
+                    : 'border-brown-faint bg-white/70 hover:border-brown-primary/45'
                   }`}
               >
-                <div className={`rounded-xl p-2.5 ${paymentMethod === 'card' ? 'bg-brown-faint dark:bg-brown-faint/70' : 'bg-slate-100 dark:bg-slate-700'}`}>
-                  <CreditCard className={`h-6 w-6 ${paymentMethod === 'card' ? 'text-brown-primary dark:text-brown-primary' : 'text-slate-400'}`} />
+                <div className={`rounded-xl p-2.5 ${paymentMethod === 'card' ? 'bg-white/80' : 'bg-brown-faint'}`}>
+                  <CreditCard className={`h-6 w-6 ${paymentMethod === 'card' ? 'text-brown-primary' : 'text-brown-dark/60'}`} />
                 </div>
-                <span className={`text-sm font-bold ${paymentMethod === 'card' ? 'text-brown-dark dark:text-brown-primary' : 'text-slate-600 dark:text-slate-400'}`}>
+                <span className={`text-sm font-bold ${paymentMethod === 'card' ? 'text-brown-dark' : 'text-brown-dark/75'}`}>
                   Credit / Debit Card
                 </span>
                 {paymentMethod === 'card' && (
-                  <CheckCircle2 className="h-4 w-4 text-indigo-500 absolute top-3 right-3" />
+                  <CheckCircle2 className="h-4 w-4 text-brown-primary absolute top-3 right-3" />
                 )}
               </button>
 
@@ -171,25 +171,25 @@ export default function Payment() {
                 onClick={() => { setPaymentMethod('cod'); setErrorMsg(''); }}
                 className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 transition-all duration-200 cursor-pointer
                   ${paymentMethod === 'cod'
-                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 shadow-md'
-                    : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 hover:border-emerald-300 dark:hover:border-emerald-700'
+                    ? 'border-olive bg-olive/10 shadow-md'
+                    : 'border-brown-faint bg-white/70 hover:border-olive/45'
                   }`}
               >
-                <div className={`rounded-xl p-2.5 ${paymentMethod === 'cod' ? 'bg-brown-faint dark:bg-brown-faint/70' : 'bg-slate-100 dark:bg-slate-700'}`}>
-                  <Banknote className={`h-6 w-6 ${paymentMethod === 'cod' ? 'text-brown-primary dark:text-brown-primary' : 'text-slate-400'}`} />
+                <div className={`rounded-xl p-2.5 ${paymentMethod === 'cod' ? 'bg-white/80' : 'bg-brown-faint'}`}>
+                  <Banknote className={`h-6 w-6 ${paymentMethod === 'cod' ? 'text-olive' : 'text-brown-dark/60'}`} />
                 </div>
-                <span className={`text-sm font-bold ${paymentMethod === 'cod' ? 'text-brown-dark dark:text-brown-primary' : 'text-slate-600 dark:text-slate-400'}`}>
+                <span className={`text-sm font-bold ${paymentMethod === 'cod' ? 'text-brown-dark' : 'text-brown-dark/75'}`}>
                   Cash on Delivery
                 </span>
                 {paymentMethod === 'cod' && (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 absolute top-3 right-3" />
+                  <CheckCircle2 className="h-4 w-4 text-olive absolute top-3 right-3" />
                 )}
               </button>
             </div>
           </div>
 
           {errorMsg && (
-            <div className="mb-4 rounded-xl bg-red-50 dark:bg-red-950/20 p-3 text-xs font-semibold text-red-650 dark:text-red-400">
+            <div className="mb-4 rounded-xl bg-rose-50 p-3 text-xs font-bold text-rose-700 border border-rose-200">
               {errorMsg}
             </div>
           )}
@@ -198,8 +198,8 @@ export default function Payment() {
             {/* Card Fields — only shown when card is selected */}
             {paymentMethod === 'card' && (
               <div className="space-y-4">
-                <div className="rounded-xl bg-amber-50 dark:bg-amber-950/20 p-4 text-xs font-semibold text-amber-650 dark:text-amber-400">
-                  <p className="font-bold flex items-center gap-1 mb-1">
+                <div className="rounded-xl bg-warning/10 p-4 text-xs font-semibold text-brown-dark/85 border border-brown-faint">
+                  <p className="font-bold flex items-center gap-1 mb-1 text-brown-dark">
                     <AlertCircle className="h-4 w-4 shrink-0" /> Sandbox Mode
                   </p>
                   This is a mock transaction gateway. Feel free to input any valid numbers (e.g. 4111 1111 ...). Real cards will not be processed.
@@ -270,14 +270,14 @@ export default function Payment() {
               <div className="rounded-2xl payment-panel-soft p-5 space-y-3">
                 <div className="flex items-center gap-3">
                   <div className="rounded-xl bg-brown-faint p-2">
-                    <Truck className="h-6 w-6 text-brown-primary dark:text-brown-primary" />
+                    <Truck className="h-6 w-6 text-brown-primary" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-brown-dark dark:text-brown-primary">Cash on Delivery Selected</p>
-                    <p className="text-xs text-text-secondary">You'll pay when your order arrives</p>
+                    <p className="text-sm font-bold text-brown-dark">Cash on Delivery Selected</p>
+                    <p className="text-xs font-semibold text-brown-dark/80">You'll pay when your order arrives</p>
                   </div>
                 </div>
-                <ul className="text-xs text-text-secondary dark:text-slate-400 space-y-1.5 pl-1">
+                <ul className="text-xs font-semibold text-brown-dark/85 space-y-1.5 pl-1">
                   <li className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> No online payment required</li>
                   <li className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> Pay in cash upon delivery</li>
                   <li className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> Order is confirmed immediately</li>
@@ -304,17 +304,17 @@ export default function Payment() {
         {/* Order review details sidebar */}
         <div className="payment-panel-soft p-6 rounded-3xl space-y-6 shadow-sm">
           <h2 className="text-lg font-bold text-brown-dark">Shipping Summary</h2>
-          <div className="text-xs space-y-2 text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-950/40 p-4 rounded-xl">
+          <div className="text-xs space-y-2 font-semibold text-brown-dark/85 bg-brown-faint/60 border border-brown-faint p-4 rounded-xl">
             <div>
-              <span className="font-bold block text-slate-700 dark:text-slate-350">Name</span>
+              <span className="font-bold block text-brown-dark">Name</span>
               <span>{shippingInfo.name}</span>
             </div>
             <div>
-              <span className="font-bold block text-slate-700 dark:text-slate-350">Email</span>
+              <span className="font-bold block text-brown-dark">Email</span>
               <span>{shippingInfo.email}</span>
             </div>
             <div>
-              <span className="font-bold block text-slate-700 dark:text-slate-350">Address</span>
+              <span className="font-bold block text-brown-dark">Address</span>
               <span>{shippingInfo.address}</span>
             </div>
           </div>
@@ -322,8 +322,8 @@ export default function Payment() {
           {/* Payment method badge */}
           <div className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold
             ${paymentMethod === 'card'
-              ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300'
-              : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300'
+              ? 'bg-brown-faint text-brown-dark border border-brown-faint'
+              : 'bg-olive/10 text-brown-dark border border-olive/20'
             }`}
           >
             {paymentMethod === 'card'
@@ -332,7 +332,7 @@ export default function Payment() {
             }
           </div>
 
-          <div className="border-t border-slate-100 dark:border-slate-850 pt-4 flex justify-between items-baseline text-brown-dark dark:text-white">
+          <div className="border-t border-brown-faint pt-4 flex justify-between items-baseline text-brown-dark">
             <span className="text-sm font-bold">Total Amount Due</span>
             <span className="text-2xl font-black">${cartTotal.toFixed(2)}</span>
           </div>

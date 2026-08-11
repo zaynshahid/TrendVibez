@@ -446,10 +446,10 @@ export default function AdminDashboard() {
 
   if (loading && !stats) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-indigo-650" />
-          <span className="text-xs font-semibold text-slate-500">Loading store admin panels...</span>
+      <div className="theme-loading-screen">
+        <div className="theme-loading-content">
+          <Loader2 className="h-8 w-8 animate-spin text-brown-primary" />
+          <span>Loading store admin panels...</span>
         </div>
       </div>
     );

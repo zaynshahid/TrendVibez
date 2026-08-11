@@ -375,7 +375,7 @@ export default function ActivityLogTab() {
       {/* ==================== DETAIL & JSON DIFF MODAL ==================== */}
       {selectedLog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="w-full max-w-4xl bg-[var(--bg-card)] rounded-3xl shadow-2xl border border-brown-faint overflow-hidden flex flex-col max-h-[90vh]">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-brown-faint bg-brown-faint/80">
               <div className="flex items-center gap-3">
@@ -400,7 +400,7 @@ export default function ActivityLogTab() {
                 <div className="p-3 rounded-2xl bg-brown-faint/80 border border-brown-faint space-y-1">
                   <span className="text-[10px] uppercase font-bold text-brown-primary">Admin</span>
                   <div className="font-bold text-brown-dark truncate">{selectedLog.adminName}</div>
-                  <div className="text-[10px] text-text-secondary font-mono truncate">{selectedLog.adminId}</div>
+                  <div className="text-[10px] text-brown-dark/75 font-mono truncate">{selectedLog.adminId}</div>
                 </div>
 
                 <div className="p-3 rounded-2xl bg-brown-faint/80 border border-brown-faint space-y-1">
@@ -426,22 +426,22 @@ export default function ActivityLogTab() {
                     <Globe className="h-3.5 w-3.5 text-brown-primary" />
                     <span>{selectedLog.ipAddress || 'unknown'}</span>
                   </div>
-                  <div className="text-[10px] text-text-secondary font-mono">{new Date(selectedLog.createdAt).toLocaleString()}</div>
+                  <div className="text-[10px] text-brown-dark/75 font-mono">{new Date(selectedLog.createdAt).toLocaleString()}</div>
                 </div>
               </div>
 
               {/* JSON Diff Side-by-Side Section */}
               {(selectedLog.oldData || selectedLog.newData) ? (
                 <div className="space-y-2">
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">State Snapshot Comparison</h4>
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-brown-dark">State Snapshot Comparison</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Old Data */}
                     <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-[11px] font-bold text-rose-600 dark:text-rose-400 px-1">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-rose-700 px-1">
                         <span>Previous State (oldData)</span>
-                        {!selectedLog.oldData && <span className="text-slate-400 font-normal italic">None</span>}
+                        {!selectedLog.oldData && <span className="text-brown-dark/60 font-semibold italic">None</span>}
                       </div>
-                      <pre className="p-4 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 text-[11px] font-mono text-slate-800 dark:text-slate-200 overflow-x-auto max-h-64 whitespace-pre-wrap">
+                      <pre className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-[11px] font-mono font-semibold text-brown-dark overflow-x-auto max-h-64 whitespace-pre-wrap leading-relaxed">
                         {selectedLog.oldData
                           ? JSON.stringify(parseJsonData(selectedLog.oldData), null, 2)
                           : '// No previous record state snapshot'}
@@ -450,11 +450,11 @@ export default function ActivityLogTab() {
 
                     {/* New Data */}
                     <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-[11px] font-bold text-emerald-600 dark:text-emerald-400 px-1">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-olive px-1">
                         <span>New State (newData)</span>
-                        {!selectedLog.newData && <span className="text-slate-400 font-normal italic">None</span>}
+                        {!selectedLog.newData && <span className="text-brown-dark/60 font-semibold italic">None</span>}
                       </div>
-                      <pre className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 text-[11px] font-mono text-slate-800 dark:text-slate-200 overflow-x-auto max-h-64 whitespace-pre-wrap">
+                      <pre className="p-4 rounded-2xl bg-olive/10 border border-olive/20 text-[11px] font-mono font-semibold text-brown-dark overflow-x-auto max-h-64 whitespace-pre-wrap leading-relaxed">
                         {selectedLog.newData
                           ? JSON.stringify(parseJsonData(selectedLog.newData), null, 2)
                           : '// No new record state snapshot'}
@@ -463,17 +463,17 @@ export default function ActivityLogTab() {
                   </div>
                 </div>
               ) : (
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-slate-450 italic text-center">
+                <div className="p-4 rounded-2xl bg-brown-faint/70 border border-brown-faint text-brown-dark/80 font-semibold italic text-center">
                   No state snapshots were recorded for this simple action.
                 </div>
               )}
             </div>
 
             {/* Modal Footer */}
-            <div className="flex justify-end px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850">
+            <div className="flex justify-end px-6 py-4 border-t border-brown-faint bg-brown-faint/70">
               <button
                 onClick={() => setSelectedLog(null)}
-                className="px-5 py-2 rounded-xl bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-xs transition-colors"
+                className="btn-primary px-5 py-2 text-xs"
               >
                 Close
               </button>

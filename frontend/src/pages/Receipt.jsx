@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { CheckCircle2, Printer, ShoppingBag, ClipboardList, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Printer, ShoppingBag, ClipboardList } from 'lucide-react';
 
 export default function Receipt() {
   const location = useLocation();
@@ -15,7 +15,15 @@ export default function Receipt() {
     }
   }, [order, navigate]);
 
-  if (!order) return null;
+  if (!order) {
+    return (
+      <div className="theme-loading-screen">
+        <div className="theme-loading-content">
+          <div className="theme-loading-spinner"></div>
+        </div>
+      </div>
+    );
+  }
 
   const handlePrint = () => {
     window.print();
@@ -39,7 +47,7 @@ export default function Receipt() {
         <h1 className="text-3xl font-extrabold tracking-tight text-brown-dark leading-tight">
           Payment Successful!
         </h1>
-        <p className="text-sm text-text-secondary max-w-md mx-auto">
+        <p className="text-sm font-semibold text-brown-dark/80 max-w-md mx-auto">
           Thank you for your purchase. Your order has been registered in our database. A receipt copy is shown below.
         </p>
       </div>
@@ -47,16 +55,16 @@ export default function Receipt() {
       {/* Invoice Card Container */}
       <div className="payment-panel p-8 rounded-3xl shadow-sm space-y-8">
         {/* Invoice Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-850 pb-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-brown-faint pb-6">
           <div className="space-y-1">
             <span className="text-xs font-bold uppercase tracking-wider text-brown-primary">TrendVibe Receipt</span>
             <h2 className="text-xl font-black text-brown-dark">Order Reference: {order.orderReference}</h2>
-            <p className="text-xs text-text-secondary">{formattedDate}</p>
+            <p className="text-xs font-semibold text-brown-dark/75">{formattedDate}</p>
           </div>
           <div className="no-print">
             <button
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-550 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 transition-all hover:scale-102 cursor-pointer"
+              className="btn-outline px-4 py-2 text-xs"
             >
               <Printer className="h-4 w-4" />
               <span>Print Invoice</span>
@@ -65,50 +73,50 @@ export default function Receipt() {
         </div>
 
         {/* Client & Shipping Metadata */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs text-text-secondary bg-slate-50 dark:bg-slate-950/40 p-4 rounded-2xl">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs font-semibold text-brown-dark/85 bg-brown-faint/60 border border-brown-faint p-4 rounded-2xl">
           <div className="space-y-1.5">
-            <span className="font-extrabold text-brown-dark dark:text-slate-250 block uppercase tracking-wider">Delivery Details</span>
-            <p className="font-semibold text-brown-dark dark:text-slate-200">{order.name}</p>
+            <span className="font-extrabold text-brown-dark block uppercase tracking-wider">Delivery Details</span>
+            <p className="font-bold text-brown-dark">{order.name}</p>
             <p className="leading-relaxed">{order.address}</p>
           </div>
           <div className="space-y-1.5 sm:text-right">
-            <span className="font-extrabold text-brown-dark dark:text-slate-250 block uppercase tracking-wider">Payment Metadata</span>
-            <p>Email: <span className="font-semibold text-brown-dark dark:text-slate-200">{order.email}</span></p>
-            <p>Method: <span className="font-semibold text-brown-dark dark:text-slate-200">{order.paymentMethod}</span></p>
-            <p>Status: <span className="font-semibold text-emerald-500 uppercase">Paid</span></p>
+            <span className="font-extrabold text-brown-dark block uppercase tracking-wider">Payment Metadata</span>
+            <p>Email: <span className="font-bold text-brown-dark">{order.email}</span></p>
+            <p>Method: <span className="font-bold text-brown-dark">{order.paymentMethod}</span></p>
+            <p>Status: <span className="font-bold text-olive uppercase">Paid</span></p>
           </div>
         </div>
 
         {/* Invoice Items Table */}
         <div className="space-y-4">
-          <span className="text-xs font-extrabold text-slate-900 dark:text-slate-200 uppercase tracking-wider block">Items Purchased</span>
-          <div className="divide-y divide-slate-100 dark:divide-slate-850">
+          <span className="text-xs font-extrabold text-brown-dark uppercase tracking-wider block">Items Purchased</span>
+          <div className="divide-y divide-brown-faint">
             {order.items.map((item) => (
               <div key={item.productId} className="flex justify-between items-center py-4 text-xs">
                 <div className="flex gap-3 items-center">
-                  <div className="h-12 w-10 shrink-0 rounded overflow-hidden bg-slate-100 dark:bg-slate-800">
+                  <div className="h-12 w-10 shrink-0 rounded overflow-hidden bg-brown-faint">
                     <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
                   </div>
                   <div className="space-y-0.5">
-                    <span className="font-bold text-brown-dark dark:text-slate-100 block">
+                    <span className="font-bold text-brown-dark block">
                       {item.name}
                     </span>
                     {item.selectedColor && (
-                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/50 dark:border-indigo-800/50">
+                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-md bg-brown-faint text-brown-primary border border-brown-faint">
                         Size: {item.selectedColor}
                       </span>
                     )}
-                    <span className="text-slate-450 block">
+                    <span className="font-semibold text-brown-dark/75 block">
                       ${item.price.toFixed(2)} each
                     </span>
                   </div>
                 </div>
 
                 <div className="text-right space-y-0.5">
-                  <span className="font-bold text-slate-850 dark:text-slate-200 block">
+                  <span className="font-extrabold text-brown-dark block">
                     ${(item.price * item.quantity).toFixed(2)}
                   </span>
-                  <span className="text-slate-450">
+                  <span className="font-semibold text-brown-dark/75">
                     Qty: {item.quantity}
                   </span>
                 </div>
@@ -118,7 +126,7 @@ export default function Receipt() {
         </div>
 
         {/* Invoice Footer Total */}
-        <div className="border-t border-slate-100 dark:border-slate-850 pt-6 flex justify-between items-baseline text-brown-dark">
+        <div className="border-t border-brown-faint pt-6 flex justify-between items-baseline text-brown-dark">
           <span className="text-sm font-bold">Total Settled</span>
           <span className="text-3xl font-black">${order.totalAmount.toFixed(2)}</span>
         </div>
@@ -128,14 +136,14 @@ export default function Receipt() {
       <div className="flex flex-wrap justify-center gap-4 no-print">
         <Link
           to="/dashboard"
-          className="inline-flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 py-3 px-6 text-sm font-bold text-slate-700 dark:text-slate-300 transition-all duration-200 ease-out transform hover:-translate-y-0.5 hover:shadow-sm"
+          className="btn-outline py-3 px-6 text-sm"
         >
           <ClipboardList className="h-4.5 w-4.5" />
           <span>View Order History</span>
         </Link>
         <Link
           to="/products"
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-650 hover:bg-indigo-600 py-3 px-6 text-sm font-bold text-white shadow-sm transition-all duration-200 ease-out transform hover:-translate-y-0.5 hover:shadow-lg"
+          className="btn-primary py-3 px-6 text-sm"
         >
           <ShoppingBag className="h-4.5 w-4.5" />
           <span>Continue Shopping</span>
