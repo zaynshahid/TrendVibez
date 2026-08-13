@@ -12,6 +12,11 @@ export default function ProductCard({ product }) {
   const handleAdd = async (e) => {
     e.preventDefault();
     if (product.stock <= 0) return;
+    if (Array.isArray(product.variants) && product.variants.some(variant => variant.variantType === 'size')) {
+      setErrorMsg('Please choose a size first');
+      setTimeout(() => setErrorMsg(''), 3000);
+      return;
+    }
 
     setAdding(true);
     setErrorMsg('');

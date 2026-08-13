@@ -850,7 +850,7 @@ export async function createOrder({ id, orderReference, userId, totalAmount, nam
       if (sizeInventory.length > 0) {
         let matchingSize = sizeInventory.find(entry => (entry.sizeName || '').toLowerCase() === selectedSize.toLowerCase());
         if (!matchingSize) {
-          matchingSize = sizeInventory.find(entry => entry.stock >= item.quantity) || sizeInventory[0];
+          throw new Error(`Selected size '${selectedSize || 'unknown'}' is unavailable for product '${product.name}'.`);
         }
         if (!matchingSize || matchingSize.stock < item.quantity) {
           const sizeInfo = matchingSize ? ` for size '${matchingSize.sizeName}'` : '';

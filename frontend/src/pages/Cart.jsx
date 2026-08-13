@@ -19,7 +19,8 @@ export default function Cart() {
     setUpdatingId(itemKey);
     setErrorMsg('');
     try {
-      await updateQuantity(productId, newQty, variantId);
+      const item = cart.find(cartItem => cartItem.productId === productId && (cartItem.variantId || '') === (variantId || ''));
+      await updateQuantity(productId, newQty, variantId, item?.selectedColor || '');
     } catch (err) {
       console.error(err);
       setErrorMsg(err.message || 'Failed to update quantity');

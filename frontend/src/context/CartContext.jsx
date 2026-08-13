@@ -25,7 +25,12 @@ export function CartProvider({ children }) {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ productId: item.productId, quantity: item.quantity })
+                body: JSON.stringify({
+                  productId: item.productId,
+                  variantId: item.variantId || '',
+                  selectedColor: item.selectedColor || '',
+                  quantity: item.quantity
+                })
               });
             }
             // Clear guest cart once synced
@@ -129,7 +134,7 @@ export function CartProvider({ children }) {
     }
   };
 
-  const updateQuantity = async (productId, quantity, variantId = '') => {
+  const updateQuantity = async (productId, quantity, variantId = '', selectedColor = '') => {
     if (quantity <= 0) {
       return removeFromCart(productId, variantId);
     }
@@ -141,7 +146,7 @@ export function CartProvider({ children }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ productId, variantId, quantity })
+        body: JSON.stringify({ productId, variantId, selectedColor, quantity })
       });
       const data = await res.json();
       if (!res.ok) {
