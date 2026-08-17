@@ -10,6 +10,7 @@ import adminRoutes from './routes/admin.js';
 import contactRoutes from './routes/contact.js';
 import activityLogsRoutes from './routes/activityLogs.js';
 import categoryRoutes from './routes/categories.js';
+import chatRoutes from './routes/chat.js';
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/admin/activity-logs', activityLogsRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/chat', chatRoutes);
 
 // 404 Route handler
 app.use((req, res) => {

@@ -8,6 +8,7 @@ import { CartProvider } from './context/CartContext.jsx';
 // Core UI Layout Components
 import Navbar from './components/Navbar.jsx';
 import Footer from './components/Footer.jsx';
+import Chatbot from './components/Chatbot.jsx';
 
 // Route Guards
 import ProtectedRoute from './components/ProtectedRoute.jsx';
@@ -93,6 +94,9 @@ export default function App() {
 
             {/* Footer Brand Banner */}
             <Footer />
+
+            {/* AI Assistant Floating Chatbot */}
+            <Chatbot />
           </div>
         </BrowserRouter>
       </CartProvider>

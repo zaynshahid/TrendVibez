@@ -8,64 +8,64 @@ export function CartProvider({ children }) {
   const [cart, setCart] = useState([]);
   const [loadingCart, setLoadingCart] = useState(true);
 
-  // Load cart on boot or user/token change
-  useEffect(() => {
-    async function syncCart() {
-      setLoadingCart(true);
-      if (token && user) {
-        try {
-          // If there are items in the local guest cart, merge them into the database first
-          const guestCartJson = localStorage.getItem('tv_guest_cart');
-          if (guestCartJson) {
-            const guestCart = JSON.parse(guestCartJson);
-            for (const item of guestCart) {
-              await fetch(`${API_URL}/cart`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                  productId: item.productId,
-                  variantId: item.variantId || '',
-                  selectedColor: item.selectedColor || '',
-                  quantity: item.quantity
-                })
-              });
-            }
-            // Clear guest cart once synced
-            localStorage.removeItem('tv_guest_cart');
+  const syncCart = React.useCallback(async () => {
+    setLoadingCart(true);
+    if (token && user) {
+      try {
+        // If there are items in the local guest cart, merge them into the database first
+        const guestCartJson = localStorage.getItem('tv_guest_cart');
+        if (guestCartJson) {
+          const guestCart = JSON.parse(guestCartJson);
+          for (const item of guestCart) {
+            await fetch(`${API_URL}/cart`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                productId: item.productId,
+                variantId: item.variantId || '',
+                selectedColor: item.selectedColor || '',
+                quantity: item.quantity
+              })
+            });
           }
-
-          // Now fetch the fully consolidated database cart
-          const res = await fetch(`${API_URL}/cart`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const dbCart = await res.json();
-            setCart(dbCart);
-          }
-        } catch (error) {
-          console.error('Failed to sync/fetch cart:', error);
+          // Clear guest cart once synced
+          localStorage.removeItem('tv_guest_cart');
         }
-      } else {
-        // Logged out / Guest user: read cart from local storage
-        const localCart = localStorage.getItem('tv_guest_cart');
-        if (localCart) {
-          try {
-            setCart(JSON.parse(localCart));
-          } catch (e) {
-            setCart([]);
-          }
-        } else {
+
+        // Now fetch the fully consolidated database cart
+        const res = await fetch(`${API_URL}/cart`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const dbCart = await res.json();
+          setCart(dbCart);
+        }
+      } catch (error) {
+        console.error('Failed to sync/fetch cart:', error);
+      }
+    } else {
+      // Logged out / Guest user: read cart from local storage
+      const localCart = localStorage.getItem('tv_guest_cart');
+      if (localCart) {
+        try {
+          setCart(JSON.parse(localCart));
+        } catch (e) {
           setCart([]);
         }
+      } else {
+        setCart([]);
       }
-      setLoadingCart(false);
     }
-
-    syncCart();
+    setLoadingCart(false);
   }, [token, user]);
+
+  // Load cart on boot or user/token change
+  useEffect(() => {
+    syncCart();
+  }, [syncCart]);
 
   const addToCart = async (productId, quantity = 1, variantId = '', selectedColor = '') => {
     if (token) {
@@ -217,6 +217,7 @@ export function CartProvider({ children }) {
       updateQuantity,
       removeFromCart,
       clearCart,
+      syncCart,
       cartTotal: parseFloat(cartTotal.toFixed(2)),
       cartCount
     }}>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useCart } from '../context/CartContext.jsx';
-import { ShoppingBag, User, LogOut, Menu, X, LayoutDashboard } from 'lucide-react';
+import { ShoppingBag, User, LogOut, Menu, X, LayoutDashboard, Sparkles } from 'lucide-react';
 
 export default function Navbar() {
   const { user, isAdmin, logout } = useAuth();
@@ -62,6 +62,14 @@ export default function Navbar() {
               <NavLink to="/products" className={navLinkClass}>Collection</NavLink>
               <NavLink to="/about" className={navLinkClass}>Our Story</NavLink>
               <NavLink to="/support" className={navLinkClass}>Support</NavLink>
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('open-ai-chatbot'))}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-[#6F4E37]/10 hover:bg-[#6F4E37]/20 text-[#6F4E37] border border-[#6F4E37]/30 transition-all cursor-pointer shadow-2xs hover:scale-105"
+                title="Open AI Fashion Assistant"
+              >
+                <Sparkles size={13} className="text-[#8B5E3C] animate-pulse" />
+                <span>AI Stylist</span>
+              </button>
             </div>
 
             <div className="hidden md:flex" style={{ alignItems: 'center', gap: '1.1rem' }}>
@@ -82,6 +90,13 @@ export default function Navbar() {
             </div>
 
             <div className="flex md:hidden" style={{ alignItems: 'center', gap: '1rem' }}>
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('open-ai-chatbot'))}
+                className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-[#6F4E37]/10 text-[#6F4E37] border border-[#6F4E37]/30"
+              >
+                <Sparkles size={12} className="text-[#8B5E3C]" />
+                <span>AI</span>
+              </button>
               <Link to="/cart" style={{ position: 'relative', display: 'inline-flex', color: 'var(--text-secondary)' }} aria-label="Shopping cart"><ShoppingBag size={20} />{cartCount > 0 && <span className="nav-cart-badge">{cartCount}</span>}</Link>
               <button className="icon-btn" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle menu">{isOpen ? <X size={22} /> : <Menu size={22} />}</button>
             </div>
@@ -94,6 +109,16 @@ export default function Navbar() {
             <NavLink to="/products" onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Collection</NavLink>
             <NavLink to="/about" onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Our Story</NavLink>
             <NavLink to="/support" onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Support</NavLink>
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                window.dispatchEvent(new CustomEvent('open-ai-chatbot'));
+              }}
+              className="mobile-nav-link flex items-center gap-2 text-[#6F4E37] font-semibold w-full text-left"
+            >
+              <Sparkles size={14} className="text-[#8B5E3C]" />
+              <span>Ask AI Fashion Stylist</span>
+            </button>
 
             <div style={{ padding: '1rem 1rem 0', borderTop: '1px solid var(--border-subtle)', marginTop: '0.5rem' }}>
               {user ? (
