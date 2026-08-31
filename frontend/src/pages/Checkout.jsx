@@ -3,11 +3,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { MapPin, Mail, User, CreditCard, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useCart } from '../context/CartContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useCurrency } from '../context/CurrencyContext.jsx';
 import LiquidGlassButton from '../components/LiquidGlassButton.jsx';
 
 export default function Checkout() {
   const { cart, cartTotal } = useCart();
   const { user } = useAuth();
+  const { formatPrice } = useCurrency();
   const navigate = useNavigate();
 
   // Pre-fill user info if logged in
@@ -151,11 +153,11 @@ export default function Checkout() {
                       </span>
                     )}
                     <span className="font-semibold text-brown-dark/80">
-                      Qty: {item.quantity} &times; ${item.product?.price?.toFixed(2)}
+                      Qty: {item.quantity} &times; {formatPrice(item.product?.price || 0)}
                     </span>
                   </div>
                   <span className="font-extrabold text-brown-dark">
-                    ${((item.product?.price || 0) * item.quantity).toFixed(2)}
+                    {formatPrice((item.product?.price || 0) * item.quantity)}
                   </span>
                 </div>
               );
@@ -166,7 +168,7 @@ export default function Checkout() {
           <div className="space-y-3 border-t border-brown-faint pt-4 text-sm">
             <div className="flex justify-between font-semibold text-brown-dark/85">
               <span>Subtotal</span>
-              <span className="font-bold text-brown-dark">${cartTotal.toFixed(2)}</span>
+              <span className="font-bold text-brown-dark">{formatPrice(cartTotal)}</span>
             </div>
             <div className="flex justify-between font-semibold text-brown-dark/85">
               <span>Shipping</span>
@@ -174,7 +176,7 @@ export default function Checkout() {
             </div>
             <div className="flex justify-between items-baseline text-brown-dark border-t border-brown-faint pt-3">
               <span className="text-base font-bold">Total Due</span>
-              <span className="text-2xl font-black">${cartTotal.toFixed(2)}</span>
+              <span className="text-2xl font-black">{formatPrice(cartTotal)}</span>
             </div>
           </div>
         </div>

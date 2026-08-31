@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth, API_URL } from '../context/AuthContext.jsx';
 import { User, Lock, Mail, ClipboardList, AlertCircle, CheckCircle, ChevronDown, ChevronUp, Clock, AlertTriangle } from 'lucide-react';
+import { useCurrency } from '../context/CurrencyContext.jsx';
 
 export default function Dashboard() {
   const { user, token, updateProfile } = useAuth();
+  const { formatPriceWithCurrency } = useCurrency();
 
   // Profile Form States
   const [name, setName] = useState(user?.name || '');
@@ -265,7 +267,7 @@ export default function Dashboard() {
                         </div>
                         <div>
                           <span className="text-text-secondary block uppercase tracking-wider text-[10px]">Total Amount</span>
-                          <span className="font-bold text-brown-dark">${order.totalAmount.toFixed(2)}</span>
+                          <span className="font-bold text-brown-dark">{formatPriceWithCurrency(order.totalAmount, order.currencyCode, order.currencyRate)}</span>
                         </div>
                       </div>
 
@@ -309,11 +311,11 @@ export default function Dashboard() {
                                         Size: {item.selectedColor}
                                       </span>
                                     )}
-                                    <span className="text-text-secondary block">${item.price.toFixed(2)} each</span>
+                                    <span className="text-text-secondary block">{formatPriceWithCurrency(item.price, order.currencyCode, order.currencyRate)} each</span>
                                   </div>
                                 </div>
                                 <div className="shrink-0 text-left sm:text-right">
-                                  <span className="font-bold text-brown-dark block">${(item.price * item.quantity).toFixed(2)}</span>
+                                  <span className="font-bold text-brown-dark block">{formatPriceWithCurrency(item.price * item.quantity, order.currencyCode, order.currencyRate)}</span>
                                   <span className="text-text-secondary">Qty: {item.quantity}</span>
                                 </div>
                               </div>

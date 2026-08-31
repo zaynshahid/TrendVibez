@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, Truck, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Truck, RefreshCw, ShieldCheck, Tag } from 'lucide-react';
 import ProductCard from '../components/ProductCard.jsx';
 import ModelSlider from '../components/ModelSlider.jsx';
 import ProductNotificationModal from '../components/ProductNotificationModal.jsx';
@@ -9,15 +9,17 @@ import { API_URL } from '../context/AuthContext.jsx';
 
 export default function Home() {
   const [featured, setFeatured] = useState([]);
+  const [discountedProducts, setDiscountedProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [productsRes, categoriesRes] = await Promise.all([
+        const [productsRes, categoriesRes, discountedRes] = await Promise.all([
           fetch(`${API_URL}/products?sort=newest`),
-          fetch(`${API_URL}/categories`)
+          fetch(`${API_URL}/categories`),
+          fetch(`${API_URL}/products?discounted=true`)
         ]);
         if (productsRes.ok) {
           const data = await productsRes.json();
@@ -26,6 +28,10 @@ export default function Home() {
         if (categoriesRes.ok) {
           const cats = await categoriesRes.json();
           setCategories(cats);
+        }
+        if (discountedRes.ok) {
+          const discData = await discountedRes.json();
+          setDiscountedProducts(discData);
         }
       } catch (err) {
         console.error('Failed to load home data:', err);
@@ -68,6 +74,45 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      {/* Special Deals & Discounted Products Section */}
+      {(loading || discountedProducts.length > 0) && (
+        <section style={{ padding: '4rem 2rem 1rem' }}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#B83227', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Tag size={13} /> Limited Time Offers
+                </p>
+                <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: 'clamp(1.75rem, 3vw, 2.25rem)', color: 'var(--text-primary)' }}>
+                  Special Deals & Discounts
+                </h2>
+              </div>
+              <Link to="/products" style={{ fontFamily: 'var(--font-sans)', fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#B83227', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', borderBottom: '1px solid #B83227', paddingBottom: '2px' }}>
+                Browse full collection <ArrowRight size={13} />
+              </Link>
+            </div>
+
+            {loading ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1.5rem' }}>
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div className="skeleton" style={{ aspectRatio: '4/5', borderRadius: '22px' }} />
+                    <div className="skeleton" style={{ height: 12, width: '60%' }} />
+                    <div className="skeleton" style={{ height: 10, width: '80%' }} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1.5rem' }}>
+                {discountedProducts.map(product => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <section id="categories" style={{ padding: '5rem 2rem' }}>
         <div style={{ maxWidth: '1280px', margin: '0 auto' }}>

@@ -98,6 +98,7 @@ async function createTables() {
       name VARCHAR(255) NOT NULL,
       description TEXT NOT NULL,
       price DECIMAL(10, 2) NOT NULL,
+      discountPercent DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
       category VARCHAR(100) NOT NULL,
       image VARCHAR(2083) NOT NULL,
       stock INT NOT NULL DEFAULT 0,
@@ -125,6 +126,9 @@ async function createTables() {
   // Migrate existing products table if needed
   try {
     await query(`ALTER TABLE products ADD COLUMN variantData TEXT NOT NULL`);
+  } catch (e) {}
+  try {
+    await query(`ALTER TABLE products ADD COLUMN discountPercent DECIMAL(5, 2) NOT NULL DEFAULT 0.00`);
   } catch (e) {}
 
   // Cart items table
@@ -159,6 +163,8 @@ async function createTables() {
       orderReference VARCHAR(50) NOT NULL UNIQUE,
       userId VARCHAR(36) NOT NULL,
       totalAmount DECIMAL(10, 2) NOT NULL,
+      currencyCode CHAR(3) NOT NULL DEFAULT 'USD',
+      currencyRate DECIMAL(14, 8) NOT NULL DEFAULT 1,
       status VARCHAR(50) NOT NULL DEFAULT 'Pending',
       name VARCHAR(255) NOT NULL,
       email VARCHAR(255) NOT NULL,
@@ -169,6 +175,9 @@ async function createTables() {
       FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
+
+  try { await query(`ALTER TABLE orders ADD COLUMN currencyCode CHAR(3) NOT NULL DEFAULT 'USD' AFTER totalAmount`); } catch (e) {}
+  try { await query(`ALTER TABLE orders ADD COLUMN currencyRate DECIMAL(14, 8) NOT NULL DEFAULT 1 AFTER currencyCode`); } catch (e) {}
 
   // Order items table
   await query(`
@@ -582,13 +591,17 @@ export async function getProductSizeOptions({ category } = {}) {
   return sortSizeNames(rows.map(row => row.sizeName));
 }
 
-export async function getAllProducts({ category, q, sort, minPrice, maxPrice, minRating, inStock, size } = {}) {
+export async function getAllProducts({ category, q, sort, minPrice, maxPrice, minRating, inStock, size, discounted } = {}) {
   let sql = 'SELECT * FROM products WHERE 1=1';
   const params = [];
 
   if (category) {
     sql += ' AND LOWER(category) = LOWER(?)';
     params.push(category);
+  }
+
+  if (discounted === 'true' || discounted === true) {
+    sql += ' AND discountPercent > 0';
   }
 
   if (q) {
@@ -646,9 +659,15 @@ export async function getAllProducts({ category, q, sort, minPrice, maxPrice, mi
   const products = [];
   for (const r of rows) {
     const sizeInventory = await getProductSizeInventory(r.id);
+    const price = parseFloat(r.price);
+    const discountPercent = parseFloat(r.discountPercent || 0);
+    const discountedPrice = discountPercent > 0 ? parseFloat((price * (1 - discountPercent / 100)).toFixed(2)) : price;
+
     products.push({
       ...r,
-      price: parseFloat(r.price),
+      price,
+      discountPercent,
+      discountedPrice,
       rating: parseFloat(r.rating),
       stock: parseInt(r.stock),
       variants: (() => {
@@ -670,9 +689,15 @@ export async function getProductById(id) {
   const rows = await query('SELECT * FROM products WHERE id = ?', [id]);
   if (!rows[0]) return null;
   const sizeInventory = await getProductSizeInventory(rows[0].id);
+  const price = parseFloat(rows[0].price);
+  const discountPercent = parseFloat(rows[0].discountPercent || 0);
+  const discountedPrice = discountPercent > 0 ? parseFloat((price * (1 - discountPercent / 100)).toFixed(2)) : price;
+
   return {
     ...rows[0],
-    price: parseFloat(rows[0].price),
+    price,
+    discountPercent,
+    discountedPrice,
     rating: parseFloat(rows[0].rating),
     stock: parseInt(rows[0].stock),
     variants: (() => {
@@ -687,14 +712,15 @@ export async function getProductById(id) {
   };
 }
 
-export async function createProduct({ id, name, description, price, category, image, stock, rating, createdAt, variants, variantData }) {
+export async function createProduct({ id, name, description, price, discountPercent = 0, category, image, stock, rating, createdAt, variants, variantData }) {
   const prodId = id || uuidv4();
   const created = createdAt || new Date().toISOString();
   const rat = rating !== undefined ? parseFloat(rating) : 4.5;
+  const disc = parseFloat(discountPercent || 0);
   const data = variantData !== undefined ? variantData : variants;
   await query(
-    'INSERT INTO products (id, name, description, price, category, image, stock, rating, variantData, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [prodId, name, description, price, category, image, stock, rat, JSON.stringify(Array.isArray(data) ? data : []), created]
+    'INSERT INTO products (id, name, description, price, discountPercent, category, image, stock, rating, variantData, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [prodId, name, description, price, disc, category, image, stock, rat, JSON.stringify(Array.isArray(data) ? data : []), created]
   );
   await syncProductSizeInventory(prodId, Array.isArray(data) ? data : []);
   return getProductById(prodId);
@@ -722,6 +748,14 @@ export async function updateProduct(id, updates) {
   return getProductById(id);
 }
 
+export async function bulkUpdateProductDiscounts(productIds, discountPercent) {
+  if (!Array.isArray(productIds) || productIds.length === 0) return [];
+  const percent = Math.max(0, Math.min(100, parseFloat(discountPercent) || 0));
+  const placeholders = productIds.map(() => '?').join(', ');
+  await query(`UPDATE products SET discountPercent = ? WHERE id IN (${placeholders})`, [percent, ...productIds]);
+  return query(`SELECT * FROM products WHERE id IN (${placeholders})`, productIds);
+}
+
 export async function deleteProduct(id) {
   await query('DELETE FROM products WHERE id = ?', [id]);
 }
@@ -730,7 +764,7 @@ export async function deleteProduct(id) {
 export async function getCartByUserId(userId) {
   const sql = `
     SELECT ci.productId, ci.variantId, ci.selectedColor, ci.quantity, 
-           p.name, p.price, p.image, p.stock, p.description, p.variantData
+           p.name, p.price, p.discountPercent, p.image, p.stock, p.description, p.variantData
     FROM cart_items ci
     LEFT JOIN products p ON ci.productId = p.id
     WHERE ci.userId = ?
@@ -752,6 +786,10 @@ export async function getCartByUserId(userId) {
       const sizeLabels = ['XS', 'S', 'M', 'L', 'XL', 'Small', 'Medium', 'Large'];
       return sizeLabels.includes(row.selectedColor) ? 'size' : 'color';
     })();
+    const price = row.price ? parseFloat(row.price) : 0;
+    const discountPercent = row.discountPercent ? parseFloat(row.discountPercent) : 0;
+    const discountedPrice = discountPercent > 0 ? parseFloat((price * (1 - discountPercent / 100)).toFixed(2)) : price;
+
     cart.push({
       productId: row.productId,
       variantId: row.variantId || '',
@@ -767,7 +805,9 @@ export async function getCartByUserId(userId) {
       product: {
         id: row.productId,
         name: row.name || 'Product Unavailable',
-        price: row.price ? parseFloat(row.price) : 0,
+        price,
+        discountPercent,
+        discountedPrice,
         image: row.image || '',
         stock: row.stock !== null ? parseInt(row.stock) : 0,
         description: row.description || ''
@@ -825,15 +865,15 @@ export async function clearCart(userId) {
 }
 
 // Order methods
-export async function createOrder({ id, orderReference, userId, totalAmount, name, email, address, paymentStatus, paymentMethod, createdAt, items }) {
+export async function createOrder({ id, orderReference, userId, totalAmount, currencyCode, currencyRate, name, email, address, paymentStatus, paymentMethod, createdAt, items }) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
     // Insert order
     await connection.query(
-      'INSERT INTO orders (id, orderReference, userId, totalAmount, status, name, email, address, paymentStatus, paymentMethod, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, orderReference, userId, totalAmount, 'Pending', name, email, address, paymentStatus || 'Paid', paymentMethod || 'Mock Card', createdAt]
+      'INSERT INTO orders (id, orderReference, userId, totalAmount, currencyCode, currencyRate, status, name, email, address, paymentStatus, paymentMethod, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, orderReference, userId, totalAmount, currencyCode || 'USD', currencyRate || 1, 'Pending', name, email, address, paymentStatus || 'Paid', paymentMethod || 'Mock Card', createdAt]
     );
 
     // Insert order items and deduct stock
@@ -1338,4 +1378,99 @@ export async function deleteSupportQuery(id) {
   await query('DELETE FROM support_queries WHERE id = ?', [id]);
 }
 
+const PRODUCT_TYPES = [
+  'shirt', 'jeans', 'denim', 'sweater', 'coat', 'tee', 't-shirt', 'set',
+  'dress', 'blazer', 'trousers', 'crop top', 'top', 'dungarees',
+  'windbreaker', 'sweatshirt', 'pyjama', 'sneakers', 'loafers', 'boots',
+  'sandals', 'slides', 'heels'
+];
 
+const PRODUCT_ATTRIBUTES = [
+  'cotton', 'denim', 'wool', 'linen', 'cashmere', 'leather', 'crepe',
+  'georgette', 'fleece', 'jersey', 'slim fit', 'oversized', 'striped',
+  'button-down', 'high-waisted', 'crease-resistant', 'water-repellent',
+  'floral', 'ribbed', 'knit', 'hooded', 'unisex', 'breathable',
+  'lightweight', 'cozy', 'water-resistant', 'premium', 'organic'
+];
+
+function extractProductType(name, description) {
+  const text = `${name} ${description}`.toLowerCase();
+  for (const type of PRODUCT_TYPES) {
+    if (text.includes(type)) {
+      return type;
+    }
+  }
+  return null;
+}
+
+function getProductAttributes(name, description) {
+  const text = `${name} ${description}`.toLowerCase();
+  return PRODUCT_ATTRIBUTES.filter(attr => text.includes(attr));
+}
+
+export async function getProductRecommendations(productId) {
+  const target = await getProductById(productId);
+  if (!target) {
+    throw new Error('Product not found');
+  }
+
+  const allProducts = await getAllProducts();
+  const candidates = allProducts.filter(p => p.id !== target.id);
+
+  const targetType = extractProductType(target.name, target.description);
+  const targetAttrs = getProductAttributes(target.name, target.description);
+
+  const scoredCandidates = candidates.map(candidate => {
+    let score = 0;
+
+    // 1. Category Match
+    if (target.category.toLowerCase() === candidate.category.toLowerCase()) {
+      score += 10;
+    }
+
+    // 2. Type Match
+    const candidateType = extractProductType(candidate.name, candidate.description);
+    if (targetType && candidateType && targetType === candidateType) {
+      score += 8;
+    }
+
+    // 3. Price Similarity Match
+    if (target.price > 0) {
+      const priceDiffPercent = Math.abs(target.price - candidate.price) / target.price;
+      if (priceDiffPercent <= 0.1) {
+        score += 5;
+      } else if (priceDiffPercent <= 0.2) {
+        score += 3;
+      } else if (priceDiffPercent <= 0.3) {
+        score += 1;
+      }
+    }
+
+    // 4. Attributes Match
+    const candidateAttrs = getProductAttributes(candidate.name, candidate.description);
+    const sharedAttrs = targetAttrs.filter(attr => candidateAttrs.includes(attr));
+    score += sharedAttrs.length * 2;
+
+    return {
+      ...candidate,
+      similarityScore: score
+    };
+  });
+
+  const isTargetOutOfStock = target.stock <= 0;
+  scoredCandidates.sort((a, b) => {
+    if (isTargetOutOfStock) {
+      const aInStock = a.stock > 0 ? 1 : 0;
+      const bInStock = b.stock > 0 ? 1 : 0;
+      if (aInStock !== bInStock) {
+        return bInStock - aInStock;
+      }
+    }
+    if (b.similarityScore !== a.similarityScore) {
+      return b.similarityScore - a.similarityScore;
+    }
+    return b.rating - a.rating;
+  });
+
+  return scoredCandidates.slice(0, 4);
+}

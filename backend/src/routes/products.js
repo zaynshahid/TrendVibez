@@ -1,16 +1,16 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { getAllProducts, getProductById, createProduct, updateProduct, deleteProduct, getProductSizeOptions } from '../db.js';
+import { getAllProducts, getProductById, createProduct, updateProduct, deleteProduct, getProductSizeOptions, getProductRecommendations, bulkUpdateProductDiscounts } from '../db.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = express.Router();
 
-// GET ALL PRODUCTS (with filtering, sorting, searching)
+// GET ALL PRODUCTS (with filtering, sorting, searching, discounted)
 router.get('/', async (req, res) => {
-  const { category, q, sort, minPrice, maxPrice, minRating, inStock, size } = req.query;
+  const { category, q, sort, minPrice, maxPrice, minRating, inStock, size, discounted } = req.query;
   try {
-    const products = await getAllProducts({ category, q, sort, minPrice, maxPrice, minRating, inStock, size });
+    const products = await getAllProducts({ category, q, sort, minPrice, maxPrice, minRating, inStock, size, discounted });
     res.json(products);
   } catch (error) {
     console.error('Get products error:', error);
@@ -26,6 +26,34 @@ router.get('/meta/sizes', async (req, res) => {
     res.json(sizes);
   } catch (error) {
     console.error('Get product size options error:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// BULK UPDATE PRODUCT DISCOUNTS (Admin Only)
+router.put('/bulk-discount', requireAdmin, async (req, res) => {
+  const { productIds, discountPercent } = req.body;
+  if (!Array.isArray(productIds) || productIds.length === 0) {
+    return res.status(400).json({ message: 'Product IDs array is required' });
+  }
+  const parsedDiscount = parseFloat(discountPercent);
+  if (isNaN(parsedDiscount) || parsedDiscount < 0 || parsedDiscount > 100) {
+    return res.status(400).json({ message: 'Discount percentage must be between 0 and 100' });
+  }
+  try {
+    await bulkUpdateProductDiscounts(productIds, parsedDiscount);
+    logActivity({
+      adminId: req.user.id,
+      adminName: req.user.name,
+      action: 'BULK_DISCOUNT_PRODUCTS',
+      module: 'products',
+      recordId: 'bulk',
+      newData: { count: productIds.length, discountPercent: parsedDiscount, productIds },
+      ipAddress: getClientIp(req)
+    });
+    res.json({ message: `Discount updated to ${parsedDiscount}% for ${productIds.length} item(s).`, updatedCount: productIds.length });
+  } catch (error) {
+    console.error('Bulk discount error:', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
@@ -46,9 +74,20 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// GET PRODUCT RECOMMENDATIONS
+router.get('/:id/recommendations', async (req, res) => {
+  try {
+    const recommendations = await getProductRecommendations(req.params.id);
+    res.json(recommendations);
+  } catch (error) {
+    console.error('Get product recommendations error:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 // CREATE PRODUCT (Admin Only)
 router.post('/', requireAdmin, async (req, res) => {
-  const { name, description, price, category, image, stock, rating, variants } = req.body;
+  const { name, description, price, discountPercent, category, image, stock, rating, variants } = req.body;
 
   if (!name || !description || price === undefined || !category || !image || stock === undefined) {
     return res.status(400).json({ message: 'All product fields are required' });
@@ -56,12 +95,16 @@ router.post('/', requireAdmin, async (req, res) => {
 
   const parsedPrice = parseFloat(price);
   const parsedStock = parseInt(stock);
+  const parsedDiscount = discountPercent !== undefined ? parseFloat(discountPercent) : 0;
 
   if (isNaN(parsedPrice) || parsedPrice < 0) {
     return res.status(400).json({ message: 'Price must be a positive number' });
   }
   if (isNaN(parsedStock) || parsedStock < 0) {
     return res.status(400).json({ message: 'Stock must be a positive integer' });
+  }
+  if (isNaN(parsedDiscount) || parsedDiscount < 0 || parsedDiscount > 100) {
+    return res.status(400).json({ message: 'Discount percentage must be between 0 and 100' });
   }
 
   try {
@@ -70,6 +113,7 @@ router.post('/', requireAdmin, async (req, res) => {
       name,
       description,
       price: parsedPrice,
+      discountPercent: parsedDiscount,
       category,
       image,
       stock: parsedStock,
@@ -84,7 +128,7 @@ router.post('/', requireAdmin, async (req, res) => {
       action: 'CREATE_PRODUCT',
       module: 'products',
       recordId: newProduct.id,
-      newData: { name: newProduct.name, price: newProduct.price, category: newProduct.category, stock: newProduct.stock },
+      newData: { name: newProduct.name, price: newProduct.price, discountPercent: newProduct.discountPercent, category: newProduct.category, stock: newProduct.stock },
       ipAddress: getClientIp(req)
     });
 
@@ -97,7 +141,7 @@ router.post('/', requireAdmin, async (req, res) => {
 
 // UPDATE PRODUCT (Admin Only)
 router.put('/:id', requireAdmin, async (req, res) => {
-  const { name, description, price, category, image, stock, rating, variants } = req.body;
+  const { name, description, price, discountPercent, category, image, stock, rating, variants } = req.body;
   try {
     const product = await getProductById(req.params.id);
     if (!product) {
@@ -117,6 +161,14 @@ router.put('/:id', requireAdmin, async (req, res) => {
         return res.status(400).json({ message: 'Price must be a positive number' });
       }
       updates.price = parsedPrice;
+    }
+
+    if (discountPercent !== undefined) {
+      const parsedDiscount = parseFloat(discountPercent);
+      if (isNaN(parsedDiscount) || parsedDiscount < 0 || parsedDiscount > 100) {
+        return res.status(400).json({ message: 'Discount percentage must be between 0 and 100' });
+      }
+      updates.discountPercent = parsedDiscount;
     }
 
     if (stock !== undefined) {
@@ -146,7 +198,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
       action: 'UPDATE_PRODUCT',
       module: 'products',
       recordId: product.id,
-      oldData: { name: product.name, price: product.price, category: product.category, stock: product.stock, variants: product.variants },
+      oldData: { name: product.name, price: product.price, discountPercent: product.discountPercent, category: product.category, stock: product.stock, variants: product.variants },
       newData: updates,
       ipAddress: getClientIp(req)
     });

@@ -1,9 +1,7 @@
 cd C:\Users\shahi\Desktop\Website\backend
-npm install
 npm run dev
 
 cd C:\Users\shahi\Desktop\Website\frontend
-npm install
 npm run dev -- --host 0.0.0.0
 
 From the project root you can also run:
@@ -12,4 +10,4 @@ npm.cmd run backend
 npm.cmd run frontend
 
 
-netsh wlan show profile name="StromFiber-2.4G" key=clear
+netsh wlan show profile name="StormFiber-2.4G" key=clear

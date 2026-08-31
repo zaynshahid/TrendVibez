@@ -11,6 +11,7 @@ import contactRoutes from './routes/contact.js';
 import activityLogsRoutes from './routes/activityLogs.js';
 import categoryRoutes from './routes/categories.js';
 import chatRoutes from './routes/chat.js';
+import currencyRoutes from './routes/currency.js';
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/api/contact', contactRoutes);
 app.use('/api/admin/activity-logs', activityLogsRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/currency', currencyRoutes);
 
 // 404 Route handler
 app.use((req, res) => {

@@ -1,5 +1,5 @@
 import { getLayout } from './layout.js';
-import { renderOrderTable } from './orderBase.js';
+import { formatOrderAmount, renderOrderTable } from './orderBase.js';
 
 export function getAdminOrderPlacedHtml(order) {
   const content = `
@@ -40,7 +40,7 @@ export function getAdminOrderPlacedHtml(order) {
         </tr>
         <tr>
           <td style="padding-bottom: 12px; font-size: 13px; color: #64748b; font-weight: 500;">TOTAL AMOUNT</td>
-          <td style="padding-bottom: 12px; font-size: 16px; color: #4f46e5; font-weight: 700; text-align: right;">$${parseFloat(order.totalAmount).toFixed(2)}</td>
+          <td style="padding-bottom: 12px; font-size: 16px; color: #4f46e5; font-weight: 700; text-align: right;">${formatOrderAmount(order.totalAmount, order)}</td>
         </tr>
         <tr>
           <td style="font-size: 13px; color: #64748b; font-weight: 500;">PAYMENT METHOD</td>
@@ -51,7 +51,7 @@ export function getAdminOrderPlacedHtml(order) {
       <div style="border-top: 1px solid #e2e8f0; margin-top: 16px; margin-bottom: 16px;"></div>
       
       <h3 style="font-size: 14px; font-weight: 600; color: #0f172a; margin-top: 0; margin-bottom: 12px;">ITEMS LIST</h3>
-      ${renderOrderTable(order.items)}
+      ${renderOrderTable(order.items, order)}
     </div>
     
     <div style="text-align: center;">
@@ -61,7 +61,7 @@ export function getAdminOrderPlacedHtml(order) {
 
   return getLayout({
     title: `New Order Received: ${order.orderReference || order.id}`,
-    preheader: `New sale of $${parseFloat(order.totalAmount).toFixed(2)} from ${order.name}`,
+    preheader: `New sale of ${formatOrderAmount(order.totalAmount, order)} from ${order.name}`,
     content: content
   });
 }

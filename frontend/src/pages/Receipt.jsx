@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { CheckCircle2, Printer, ShoppingBag, ClipboardList } from 'lucide-react';
+import { useCurrency } from '../context/CurrencyContext.jsx';
 
 export default function Receipt() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { formatPrice, formatPriceWithCurrency } = useCurrency();
 
   const order = location.state?.order;
 
@@ -107,14 +109,14 @@ export default function Receipt() {
                       </span>
                     )}
                     <span className="font-semibold text-brown-dark/75 block">
-                      ${item.price.toFixed(2)} each
+                      {formatPriceWithCurrency(item.price, order.currencyCode, order.currencyRate)} each
                     </span>
                   </div>
                 </div>
 
                 <div className="text-right space-y-0.5">
                   <span className="font-extrabold text-brown-dark block">
-                    ${(item.price * item.quantity).toFixed(2)}
+                    {formatPriceWithCurrency(item.price * item.quantity, order.currencyCode, order.currencyRate)}
                   </span>
                   <span className="font-semibold text-brown-dark/75">
                     Qty: {item.quantity}
@@ -128,7 +130,7 @@ export default function Receipt() {
         {/* Invoice Footer Total */}
         <div className="border-t border-brown-faint pt-6 flex justify-between items-baseline text-brown-dark">
           <span className="text-sm font-bold">Total Settled</span>
-          <span className="text-3xl font-black">${order.totalAmount.toFixed(2)}</span>
+          <span className="text-3xl font-black">{formatPriceWithCurrency(order.totalAmount, order.currencyCode, order.currencyRate)}</span>
         </div>
       </div>
 

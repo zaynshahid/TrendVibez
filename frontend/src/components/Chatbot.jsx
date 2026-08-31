@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles,
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuth, API_URL } from '../context/AuthContext.jsx';
 import { useCart } from '../context/CartContext.jsx';
+import { useCurrency } from '../context/CurrencyContext.jsx';
 
 // Quick starter prompt suggestions
 const QUICK_PROMPTS = [
@@ -36,6 +37,7 @@ export default function Chatbot() {
   const { user, token } = useAuth();
   const { addToCart, removeFromCart, syncCart } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Per-user storage key — guests get their own slot too
   const chatStorageKey = `tv_chat_history_${user?.id ?? 'guest'}`;
@@ -60,12 +62,55 @@ export default function Chatbot() {
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef(null);
   const widgetRef = useRef(null);
+  const chatWindowRef = useRef(null);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
+  const getDragBounds = useCallback(() => {
+    const visibleElements = [widgetRef.current, isOpen ? chatWindowRef.current : null].filter(Boolean);
+    if (visibleElements.length === 0) return null;
+
+    const margin = 16;
+    const bounds = visibleElements.reduce((acc, element) => {
+      const rect = element.getBoundingClientRect();
+      const baseLeft = rect.left - position.x;
+      const baseTop = rect.top - position.y;
+
+      return {
+        minX: Math.max(acc.minX, margin - baseLeft),
+        maxX: Math.min(acc.maxX, window.innerWidth - margin - rect.width - baseLeft),
+        minY: Math.max(acc.minY, margin - baseTop),
+        maxY: Math.min(acc.maxY, window.innerHeight - margin - rect.height - baseTop),
+      };
+    }, {
+      minX: -Infinity,
+      maxX: Infinity,
+      minY: -Infinity,
+      maxY: Infinity,
+    });
+
+    return bounds;
+  }, [isOpen, position]);
+
+  const clampPosition = useCallback((nextPosition) => {
+    const bounds = getDragBounds();
+    if (!bounds) return nextPosition;
+
+    const minX = Math.min(bounds.minX, bounds.maxX);
+    const maxX = Math.max(bounds.minX, bounds.maxX);
+    const minY = Math.min(bounds.minY, bounds.maxY);
+    const maxY = Math.max(bounds.minY, bounds.maxY);
+
+    return {
+      x: Math.max(minX, Math.min(nextPosition.x, maxX)),
+      y: Math.max(minY, Math.min(nextPosition.y, maxY)),
+    };
+  }, [getDragBounds]);
+
   // Drag handlers
   const handleDragStart = useCallback((e) => {
+    e.preventDefault();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     dragStart.current = { mx: clientX - position.x, my: clientY - position.y };
@@ -74,21 +119,13 @@ export default function Chatbot() {
 
   const handleDragMove = useCallback((e) => {
     if (!dragStart.current) return;
+    e.preventDefault();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const newX = clientX - dragStart.current.mx;
     const newY = clientY - dragStart.current.my;
-    // Clamp within viewport
-    const widget = widgetRef.current;
-    if (widget) {
-      const rect = widget.getBoundingClientRect();
-      const maxX = window.innerWidth - rect.width;
-      const maxY = window.innerHeight - rect.height;
-      setPosition({ x: Math.max(-window.innerWidth + rect.width + 24, Math.min(newX, maxX - 24)), y: Math.max(-window.innerHeight + rect.height + 24, Math.min(newY, maxY - 24)) });
-    } else {
-      setPosition({ x: newX, y: newY });
-    }
-  }, []);
+    setPosition(clampPosition({ x: newX, y: newY }));
+  }, [clampPosition]);
 
   const handleDragEnd = useCallback(() => {
     dragStart.current = null;
@@ -99,16 +136,29 @@ export default function Chatbot() {
     if (isDragging) {
       window.addEventListener('mousemove', handleDragMove);
       window.addEventListener('mouseup', handleDragEnd);
+      window.addEventListener('mouseleave', handleDragEnd);
       window.addEventListener('touchmove', handleDragMove, { passive: false });
       window.addEventListener('touchend', handleDragEnd);
+      window.addEventListener('touchcancel', handleDragEnd);
     }
     return () => {
       window.removeEventListener('mousemove', handleDragMove);
       window.removeEventListener('mouseup', handleDragEnd);
+      window.removeEventListener('mouseleave', handleDragEnd);
       window.removeEventListener('touchmove', handleDragMove);
       window.removeEventListener('touchend', handleDragEnd);
+      window.removeEventListener('touchcancel', handleDragEnd);
     };
   }, [isDragging, handleDragMove, handleDragEnd]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setPosition((currentPosition) => clampPosition(currentPosition));
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [clampPosition]);
 
   // Listen for global open-ai-chatbot trigger events
   useEffect(() => {
@@ -187,12 +237,23 @@ export default function Chatbot() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
+      const isProductPage = location.pathname.startsWith('/products/') && location.pathname.split('/products/')[1];
+      const currentProductId = isProductPage ? location.pathname.split('/products/')[1] : null;
+
+      const pageContext = {
+        pathname: location.pathname,
+        isProductPage: !!isProductPage,
+        productId: currentProductId,
+        productDetails: window.__CURRENT_PRODUCT__ || null
+      };
+
       const response = await fetch(`${API_URL}/chat`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           message: textToSend,
-          history: chatHistory
+          history: chatHistory,
+          pageContext
         })
       });
 
@@ -458,6 +519,7 @@ export default function Chatbot() {
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            ref={chatWindowRef}
             initial={{ opacity: 0, y: 30, scale: 0.94 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 25, scale: 0.94 }}

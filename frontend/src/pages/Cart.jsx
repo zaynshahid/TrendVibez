@@ -1,17 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ShoppingBag, ArrowRight, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useCurrency } from '../context/CurrencyContext.jsx';
 import LiquidGlassButton from '../components/LiquidGlassButton.jsx';
 
 export default function Cart() {
   const { cart, loadingCart, updateQuantity, removeFromCart, cartTotal } = useCart();
   const { user } = useAuth();
+  const { formatPrice } = useCurrency();
   const navigate = useNavigate();
 
   const [updatingId, setUpdatingId] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const handleQtyChange = async (productId, variantId, currentQty, amount) => {
     const newQty = currentQty + amount;
@@ -137,7 +143,7 @@ export default function Cart() {
                         )}
                       </div>
                       <p className="text-xs font-bold text-text-secondary">
-                        ${(item.product?.price || 0).toFixed(2)} each
+                        {formatPrice(item.product?.price || 0)} each
                       </p>
                     </div>
                   </div>
@@ -168,7 +174,7 @@ export default function Cart() {
                     {/* Price display and Delete */}
                     <div className="flex items-center gap-4">
                       <span className="text-sm font-extrabold text-brown-dark">
-                        ${((item.product?.price || 0) * item.quantity).toFixed(2)}
+                        {formatPrice((item.product?.price || 0) * item.quantity)}
                       </span>
                       <button
                         onClick={() => handleRemove(item.productId, item.variantId)}
@@ -192,7 +198,7 @@ export default function Cart() {
             <div className="space-y-3 border-b border-brown-faint pb-4 text-sm">
               <div className="flex justify-between text-text-secondary">
                 <span>Subtotal</span>
-                <span className="font-semibold text-brown-dark">${cartTotal.toFixed(2)}</span>
+                <span className="font-semibold text-brown-dark">{formatPrice(cartTotal)}</span>
               </div>
               <div className="flex justify-between text-text-secondary">
                 <span>Shipping</span>
@@ -202,7 +208,7 @@ export default function Cart() {
 
             <div className="flex justify-between items-baseline text-brown-dark">
               <span className="text-base font-bold">Estimated Total</span>
-              <span className="text-2xl font-black">${cartTotal.toFixed(2)}</span>
+              <span className="text-2xl font-black">{formatPrice(cartTotal)}</span>
             </div>
 
             <LiquidGlassButton

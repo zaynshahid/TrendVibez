@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth, API_URL } from '../context/AuthContext.jsx';
 import {
   Search,
-  Calendar,
-  Filter,
   RotateCcw,
   ChevronLeft,
   ChevronRight,
@@ -157,20 +155,20 @@ export default function ActivityLogTab() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="activity-log-tab space-y-6">
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-brown-faint/70 dark:bg-[#34271f] p-6 rounded-3xl border border-brown-faint shadow-sm">
+      <div className="activity-log-header">
         <div>
-          <div className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-brown-primary" />
-            <h2 className="text-xl font-bold text-brown-dark">Admin Activity Audit Logs</h2>
+          <div className="activity-log-title-row">
+            <Activity className="activity-log-title-icon" />
+            <h2 className="activity-log-title">Admin Activity Audit Logs</h2>
           </div>
-          <p className="text-xs text-text-secondary mt-1">
+          <p className="activity-log-subtitle">
             Comprehensive history of platform administrative operations, updates, and configuration actions.
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-xl bg-white/90 text-brown-dark border border-brown-faint self-start sm:self-auto">
-          <Database className="h-4 w-4 text-brown-primary" />
+        <div className="activity-log-count-badge">
+          <Database className="h-4 w-4" />
           <span>{total} Log Entries Recorded</span>
         </div>
       </div>

@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Sparkles, ShoppingBag, ArrowRight, Tag } from 'lucide-react';
 import { useAuth, API_URL } from '../context/AuthContext.jsx';
+import { useCurrency } from '../context/CurrencyContext.jsx';
 
 export default function ProductNotificationModal({ forceShow = false, onClose = () => {} }) {
   const { user } = useAuth();
+  const { formatPrice } = useCurrency();
   const [productData, setProductData] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -216,7 +218,7 @@ export default function ProductNotificationModal({ forceShow = false, onClose = 
                     marginBottom: '0.65rem',
                   }}
                 >
-                  ${parseFloat(productData.price).toFixed(2)}
+                  {formatPrice(productData.price)}
                 </div>
 
                 <p

@@ -18,7 +18,7 @@ const router = express.Router();
 
 // CREATE ORDER (Checkout & Pay)
 router.post('/', requireAuth, async (req, res) => {
-  const { name, email, address, paymentMethod } = req.body;
+  const { name, email, address, paymentMethod, currencyCode, currencyRate } = req.body;
 
   if (!name || !email || !address) {
     return res.status(400).json({ message: 'Delivery name, email, and address are required' });
@@ -60,12 +60,19 @@ router.post('/', requireAuth, async (req, res) => {
     // Generate a random invoice reference: TV-XXXXXX
     const orderRef = `TV-${Math.floor(100000 + Math.random() * 900000)}`;
     const isCod = paymentMethod && paymentMethod.toLowerCase().includes('cash');
+    const supportedCurrencies = ['USD', 'PKR', 'EUR', 'GBP', 'AED', 'SAR'];
+    const orderCurrency = supportedCurrencies.includes(currencyCode) ? currencyCode : 'USD';
+    const orderCurrencyRate = Number.isFinite(Number(currencyRate)) && Number(currencyRate) > 0
+      ? Number(currencyRate)
+      : 1;
     
     const newOrder = await createOrder({
       id: uuidv4(),
       orderReference: orderRef,
       userId: req.user.id,
       totalAmount: parseFloat(totalAmount.toFixed(2)),
+      currencyCode: orderCurrency,
+      currencyRate: orderCurrencyRate,
       name,
       email,
       address,

@@ -54,6 +54,10 @@ const chatTools = [
               type: Type.BOOLEAN,
               description: 'Set to true to only return products with available stock (> 0)'
             },
+            discounted: {
+              type: Type.BOOLEAN,
+              description: 'Set to true to only return products currently on sale'
+            },
             size: {
               type: Type.STRING,
               description: 'Specific size filter, e.g. "S", "M", "L", "XL", "42"'
@@ -191,19 +195,24 @@ You are the luxury AI Fashion Stylist & Shopping Assistant for "TrendVibe", a hi
 
 ### Core Guidelines & Rules:
 1. **Source of Truth**: All information about products, prices, stock levels, sizes, categories, shopping cart, and customer orders MUST come strictly from tool/function calls to the MySQL database. NEVER invent or hallucinate product details, prices, stock availability, or fake order numbers.
-2. **Adding Items to Cart**:
-   - When a user asks to add an item to their cart (e.g., "add this jacket to my cart", "add 2 large denim shirts", "buy this"), ALWAYS invoke the \`add_to_cart\` tool.
-   - If the user specifies a size (e.g. "Size Medium", "Large"), pass that size to \`add_to_cart\`.
-   - If the item has sizes and the user didn't specify one, you can check \`get_product_details\` first to see available in-stock sizes, or invoke \`add_to_cart\` with an available size and notify the customer.
-   - After executing \`add_to_cart\`, confirm the item name, selected size, quantity, and price, and mention that their cart has been updated.
-3. **Viewing & Managing Cart**:
+2. **Background Page Context & Product Referencing**:
+   - The system provides context about the background page the customer is viewing.
+   - If the customer refers to "this", "this product", "this item", "this one", "add to cart", "buy this", or asks questions about the product they are viewing without explicitly naming it, ALWAYS assume they are referring to the background viewed product provided in System Context.
+   - Immediately invoke \`add_to_cart\` with the viewed product's ID (and selected size/variant if provided) when asked to add to cart.
+3. **Adding Items to Cart**:
+   - When a user asks to add an item to their cart (e.g., "add this jacket to my cart", "add this one to cart", "add 2 large denim shirts", "buy this"), ALWAYS invoke the \`add_to_cart\` tool.
+   - If the user specifies a size or if a selected size is provided in the background page context, pass that size to \`add_to_cart\`.
+   - If the item has sizes and neither the user nor page context specifies one, check \`get_product_details\` first to see available in-stock sizes, or invoke \`add_to_cart\` with an available size and notify the customer.
+  - Always quote \`discountedPrice\` as the current selling price when it differs from \`price\`; use \`price\` only as the original price for comparison.
+  - After executing \`add_to_cart\`, confirm the item name, selected size, quantity, and current selling price, and mention that their cart has been updated.
+4. **Viewing & Managing Cart**:
    - Use \`get_cart\` when the customer asks what is in their cart.
    - Use \`remove_from_cart\` when the customer asks to take an item out of their cart.
-4. **Product Links & References**: Format recommended items clearly with markdown links like [Product Name](/products/<productId>) and prices ($XX.XX).
-5. **Authentication & User Privacy**:
+5. **Product Links & References**: Format recommended items clearly with markdown links like [Product Name](/products/<productId>) and prices ($XX.XX).
+6. **Authentication & User Privacy**:
    - Orders are strictly private. If an unauthenticated guest asks about their orders, politely explain that they must log in to view order history.
    - For logged-in users, inspect their orders with \`get_user_orders\` or \`get_order_details\`.
-6. **Tone & Style**:
+7. **Tone & Style**:
    - Sophisticated, warm, attentive, and fashion-forward.
    - Structure responses clearly with bullet points and bold headers for effortless mobile and desktop reading.
 `;
@@ -226,6 +235,7 @@ async function executeToolCall(toolCall, userContext, cartActionsCollector) {
           minRating,
           inStock,
           size,
+          discounted,
           sort,
           limit = 8
         } = safeArgs;
@@ -238,6 +248,7 @@ async function executeToolCall(toolCall, userContext, cartActionsCollector) {
           minRating,
           inStock,
           size,
+          discounted,
           sort
         });
 
@@ -247,6 +258,8 @@ async function executeToolCall(toolCall, userContext, cartActionsCollector) {
           name: p.name,
           description: p.description,
           price: p.price,
+          discountPercent: p.discountPercent,
+          discountedPrice: p.discountedPrice,
           category: p.category,
           rating: p.rating,
           stock: p.stock,
@@ -284,6 +297,8 @@ async function executeToolCall(toolCall, userContext, cartActionsCollector) {
           name: product.name,
           description: product.description,
           price: product.price,
+          discountPercent: product.discountPercent,
+          discountedPrice: product.discountedPrice,
           category: product.category,
           rating: product.rating,
           stock: product.stock,
@@ -383,6 +398,8 @@ async function executeToolCall(toolCall, userContext, cartActionsCollector) {
               id: product.id,
               name: product.name,
               price: product.price,
+              discountPercent: product.discountPercent,
+              discountedPrice: product.discountedPrice,
               image: product.image,
               stock: maxStock
             }
@@ -396,6 +413,8 @@ async function executeToolCall(toolCall, userContext, cartActionsCollector) {
             id: product.id,
             name: product.name,
             price: product.price,
+            discountPercent: product.discountPercent,
+            discountedPrice: product.discountedPrice,
             size: selectedOption,
             quantity: qty,
             image: product.image
@@ -413,7 +432,7 @@ async function executeToolCall(toolCall, userContext, cartActionsCollector) {
 
         const cart = await getCartByUserId(userContext.id);
         const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-        const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+        const subtotal = cart.reduce((sum, item) => sum + (item.product.discountedPrice * item.quantity), 0);
 
         return {
           totalItems,
@@ -424,7 +443,9 @@ async function executeToolCall(toolCall, userContext, cartActionsCollector) {
             size: i.selectedColor || 'Standard',
             quantity: i.quantity,
             price: i.product.price,
-            itemTotal: parseFloat((i.product.price * i.quantity).toFixed(2)),
+            discountPercent: i.product.discountPercent,
+            discountedPrice: i.product.discountedPrice,
+            itemTotal: parseFloat((i.product.discountedPrice * i.quantity).toFixed(2)),
             image: i.product.image
           }))
         };
@@ -593,6 +614,8 @@ function extractProductsFromToolResults(toolResults) {
             id: p.id,
             name: p.name,
             price: p.price,
+            discountPercent: p.discountPercent,
+            discountedPrice: p.discountedPrice,
             image: p.image,
             category: p.category,
             rating: p.rating,
@@ -606,6 +629,8 @@ function extractProductsFromToolResults(toolResults) {
           id: res.id,
           name: res.name,
           price: res.price,
+          discountPercent: res.discountPercent,
+          discountedPrice: res.discountedPrice,
           image: res.image,
           category: res.category,
           rating: res.rating,
@@ -619,6 +644,8 @@ function extractProductsFromToolResults(toolResults) {
           id: item.id,
           name: item.name,
           price: item.price,
+          discountPercent: item.discountPercent,
+          discountedPrice: item.discountedPrice,
           image: item.image,
           rating: 4.8,
           stock: 99
@@ -653,7 +680,7 @@ function extractTextFromResponse(response) {
  * Process a chat message with Google Gemini and multi-turn tool calling.
  * Supports model fallbacks in case of transient quota/rate limits.
  */
-export async function processChatMessage({ message, history = [], user = null }) {
+export async function processChatMessage({ message, history = [], user = null, pageContext = null }) {
   const ai = getGeminiClient();
 
   // Model fallback candidate list (prioritizing fast low-latency models)
@@ -687,9 +714,33 @@ export async function processChatMessage({ message, history = [], user = null })
     ? `[System Context: Customer is logged in as "${user.name}" (Email: "${user.email}", UserID: "${user.id}")]\n`
     : `[System Context: Customer is currently browsing as an unauthenticated guest]\n`;
 
+  // Process background page context
+  let pageContextNote = '';
+  if (pageContext && pageContext.isProductPage && pageContext.productId) {
+    let viewedProduct = null;
+    try {
+      viewedProduct = await getProductById(pageContext.productId);
+    } catch (e) {
+      console.warn('Failed to fetch background product for context:', e.message);
+    }
+
+    if (viewedProduct) {
+      const selectedSize = pageContext.productDetails?.selectedSize || '';
+      const selectedVariantId = pageContext.productDetails?.selectedVariantId || '';
+      const priceContext = viewedProduct.discountedPrice < viewedProduct.price
+        ? `Current Price: $${viewedProduct.discountedPrice} (Original Price: $${viewedProduct.price}, ${viewedProduct.discountPercent}% off)`
+        : `Price: $${viewedProduct.price}`;
+      pageContextNote = `[System Context: Customer is currently viewing Product Detail page for "${viewedProduct.name}" (ID: "${viewedProduct.id}", ${priceContext}, Category: "${viewedProduct.category}", Stock: ${viewedProduct.stock}${selectedSize ? `, User Selected Size/Color on page: "${selectedSize}"` : ''}${selectedVariantId ? `, Variant ID: "${selectedVariantId}"` : ''}). If user says "add this to cart", "add this one", "buy this", "add to cart", or asks about "this product", they mean "${viewedProduct.name}" (ID: "${viewedProduct.id}").]\n`;
+    } else {
+      pageContextNote = `[System Context: Customer is currently on Product page with ID "${pageContext.productId}"].\n`;
+    }
+  } else if (pageContext && pageContext.pathname) {
+    pageContextNote = `[System Context: Customer is currently browsing on page "${pageContext.pathname}"].\n`;
+  }
+
   baseContents.push({
     role: 'user',
-    parts: [{ text: `${userContextNote}${message}` }]
+    parts: [{ text: `${userContextNote}${pageContextNote}${message}` }]
   });
 
   let lastError = null;

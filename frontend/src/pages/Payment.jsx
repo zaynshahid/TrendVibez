@@ -3,11 +3,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { CreditCard, Calendar, Lock, User, AlertCircle, ArrowLeft, Banknote, CheckCircle2, Truck } from 'lucide-react';
 import { useCart } from '../context/CartContext.jsx';
 import { useAuth, API_URL } from '../context/AuthContext.jsx';
+import { useCurrency } from '../context/CurrencyContext.jsx';
 import LiquidGlassButton from '../components/LiquidGlassButton.jsx';
 
 export default function Payment() {
   const { token } = useAuth();
   const { cartTotal, clearCart } = useCart();
+  const { currency, rates, formatPrice } = useCurrency();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -83,6 +85,8 @@ export default function Payment() {
             name: shippingInfo.name,
             email: shippingInfo.email,
             address: shippingInfo.address,
+            currencyCode: currency,
+            currencyRate: rates[currency] || 1,
             paymentMethod: paymentMethod === 'card'
               ? `Mock Card (ending in ${cardNumber.slice(-4)})`
               : 'Cash on Delivery'
@@ -293,8 +297,8 @@ export default function Payment() {
                 className="btn-primary w-full h-11 text-sm font-bold"
               >
                 {paymentMethod === 'card'
-                  ? `Authorize Payment ($${cartTotal.toFixed(2)})`
-                  : `Place Order — Pay on Delivery ($${cartTotal.toFixed(2)})`
+                  ? `Authorize Payment (${formatPrice(cartTotal)})`
+                  : `Place Order — Pay on Delivery (${formatPrice(cartTotal)})`
                 }
               </LiquidGlassButton>
             </div>
@@ -334,7 +338,7 @@ export default function Payment() {
 
           <div className="border-t border-brown-faint pt-4 flex justify-between items-baseline text-brown-dark">
             <span className="text-sm font-bold">Total Amount Due</span>
-            <span className="text-2xl font-black">${cartTotal.toFixed(2)}</span>
+            <span className="text-2xl font-black">{formatPrice(cartTotal)}</span>
           </div>
         </div>
       </div>

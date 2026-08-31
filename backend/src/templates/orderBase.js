@@ -12,7 +12,27 @@ export function getOrderStatusBadge(status) {
   return `<span class="status-badge ${badgeClass}">${status}</span>`;
 }
 
-export function renderOrderTable(items) {
+const CURRENCY_META = {
+  USD: { symbol: '$', decimals: 2 },
+  PKR: { symbol: '₨', decimals: 0 },
+  EUR: { symbol: '€', decimals: 2 },
+  GBP: { symbol: '£', decimals: 2 },
+  AED: { symbol: 'AED ', decimals: 2 },
+  SAR: { symbol: 'SAR ', decimals: 2 },
+};
+
+export function formatOrderAmount(amountUsd, order) {
+  const currencyCode = CURRENCY_META[order?.currencyCode] ? order.currencyCode : 'USD';
+  const meta = CURRENCY_META[currencyCode];
+  const rate = Number(order?.currencyRate) > 0 ? Number(order.currencyRate) : 1;
+  const amount = Number(amountUsd || 0) * rate;
+  return `${meta.symbol}${amount.toLocaleString('en-US', {
+    minimumFractionDigits: meta.decimals,
+    maximumFractionDigits: meta.decimals,
+  })}`;
+}
+
+export function renderOrderTable(items, order) {
   if (!items || items.length === 0) return '';
   
   const rows = items.map(item => {
@@ -30,10 +50,10 @@ export function renderOrderTable(items) {
         ${item.quantity}
       </td>
       <td style="padding: 12px 0; text-align: right; color: #64748b; font-size: 14px; vertical-align: middle;">
-        $${parseFloat(item.price).toFixed(2)}
+        ${formatOrderAmount(item.price, order)}
       </td>
       <td style="padding: 12px 0; text-align: right; font-weight: 600; color: #1e293b; font-size: 14px; vertical-align: middle;">
-        $${(parseFloat(item.price) * parseInt(item.quantity)).toFixed(2)}
+        ${formatOrderAmount(parseFloat(item.price) * parseInt(item.quantity), order)}
       </td>
     </tr>
   `;
@@ -96,14 +116,14 @@ export function getOrderHtml({ messageTitle, messageBody, order }) {
       <div style="border-top: 1px solid #e2e8f0; margin-top: 16px; margin-bottom: 16px;"></div>
       
       <h3 style="font-size: 14px; font-weight: 600; color: #0f172a; margin-top: 0; margin-bottom: 12px;">ORDER ITEMS</h3>
-      ${renderOrderTable(order.items)}
+      ${renderOrderTable(order.items, order)}
       
       <div style="border-top: 1px solid #e2e8f0; margin-top: 16px; margin-bottom: 16px;"></div>
       
       <table style="width: 100%;">
         <tr>
           <td style="font-size: 15px; color: #1e293b; font-weight: 700;">TOTAL AMOUNT</td>
-          <td style="font-size: 18px; color: #4f46e5; font-weight: 700; text-align: right;">$${parseFloat(order.totalAmount).toFixed(2)}</td>
+          <td style="font-size: 18px; color: #4f46e5; font-weight: 700; text-align: right;">${formatOrderAmount(order.totalAmount, order)}</td>
         </tr>
       </table>
     </div>

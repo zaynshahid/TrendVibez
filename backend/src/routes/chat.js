@@ -40,7 +40,7 @@ async function optionalAuth(req, res, next) {
  */
 router.post('/', optionalAuth, async (req, res) => {
   try {
-    const { message, history } = req.body;
+    const { message, history, pageContext } = req.body;
 
     if (!message || typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ message: 'A valid text message is required.' });
@@ -49,7 +49,8 @@ router.post('/', optionalAuth, async (req, res) => {
     const { reply, productsMentioned, cartActions } = await processChatMessage({
       message: message.trim(),
       history: Array.isArray(history) ? history : [],
-      user: req.user
+      user: req.user,
+      pageContext: pageContext || null
     });
 
     return res.json({

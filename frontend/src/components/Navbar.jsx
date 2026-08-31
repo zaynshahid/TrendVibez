@@ -2,11 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useCart } from '../context/CartContext.jsx';
-import { ShoppingBag, User, LogOut, Menu, X, LayoutDashboard, Sparkles } from 'lucide-react';
+import { useWishlist } from '../context/WishlistContext.jsx';
+import { ShoppingBag, User, LogOut, Menu, X, LayoutDashboard, Sparkles, Heart } from 'lucide-react';
+import CurrencySelector from './CurrencySelector.jsx';
 
 export default function Navbar() {
   const { user, isAdmin, logout } = useAuth();
   const { cartCount } = useCart();
+  const { wishlistCount } = useWishlist();
   const navigate = useNavigate();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -43,6 +46,7 @@ export default function Navbar() {
         .nav-link { font-family: var(--font-sans); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-secondary); text-decoration: none; padding-bottom: 2px; border-bottom: 1.5px solid transparent; transition: color 0.2s ease, border-color 0.2s ease; }
         .nav-link:hover, .nav-link-active { color: var(--brown-primary); border-bottom-color: var(--brown-primary); }
         .nav-cart-badge { position: absolute; top: -6px; right: -7px; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: var(--brown-primary); color: #fff; font-size: 9px; font-weight: 700; font-family: var(--font-sans); }
+        .nav-wishlist-badge { position: absolute; top: -6px; right: -7px; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: var(--error); color: #fff; font-size: 9px; font-weight: 700; font-family: var(--font-sans); }
         .mobile-nav-link { display: block; padding: 0.75rem 1rem; font-family: var(--font-sans); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-secondary); text-decoration: none; border-bottom: 1px solid var(--border-subtle); transition: color 0.2s ease, background-color 0.2s ease; }
         .mobile-nav-link:hover, .mobile-nav-link-active { color: var(--brown-primary); background-color: rgba(111,78,55,0.08); }
         .icon-btn { display: flex; align-items: center; justify-content: center; padding: 0.4rem; color: var(--text-secondary); background: none; border: none; cursor: pointer; transition: color 0.2s ease; border-radius: 999px; }
@@ -73,6 +77,11 @@ export default function Navbar() {
             </div>
 
             <div className="hidden md:flex" style={{ alignItems: 'center', gap: '1.1rem' }}>
+              <CurrencySelector />
+              <Link to="/wishlist" style={{ position: 'relative', display: 'inline-flex', color: 'var(--text-secondary)', transition: 'color 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.color = 'var(--error)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--text-secondary)'} aria-label="Wishlist">
+                <Heart size={20} />
+                {wishlistCount > 0 && <span className="nav-wishlist-badge">{wishlistCount}</span>}
+              </Link>
               <Link to="/cart" style={{ position: 'relative', display: 'inline-flex', color: 'var(--text-secondary)', transition: 'color 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.color = 'var(--brown-primary)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--text-secondary)'} aria-label="Shopping cart">
                 <ShoppingBag size={20} />
                 {cartCount > 0 && <span className="nav-cart-badge">{cartCount}</span>}
@@ -97,6 +106,7 @@ export default function Navbar() {
                 <Sparkles size={12} className="text-[#8B5E3C]" />
                 <span>AI</span>
               </button>
+              <Link to="/wishlist" style={{ position: 'relative', display: 'inline-flex', color: 'var(--text-secondary)' }} aria-label="Wishlist"><Heart size={20} />{wishlistCount > 0 && <span className="nav-wishlist-badge">{wishlistCount}</span>}</Link>
               <Link to="/cart" style={{ position: 'relative', display: 'inline-flex', color: 'var(--text-secondary)' }} aria-label="Shopping cart"><ShoppingBag size={20} />{cartCount > 0 && <span className="nav-cart-badge">{cartCount}</span>}</Link>
               <button className="icon-btn" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle menu">{isOpen ? <X size={22} /> : <Menu size={22} />}</button>
             </div>
@@ -107,6 +117,7 @@ export default function Navbar() {
           <div style={{ backgroundColor: 'var(--bg-primary)', borderTop: '1px solid var(--border-subtle)', paddingBottom: '1.5rem' }}>
             <NavLink to="/" end onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Home</NavLink>
             <NavLink to="/products" onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Collection</NavLink>
+            <NavLink to="/wishlist" onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Wishlist</NavLink>
             <NavLink to="/about" onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Our Story</NavLink>
             <NavLink to="/support" onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Support</NavLink>
             <button
@@ -119,6 +130,11 @@ export default function Navbar() {
               <Sparkles size={14} className="text-[#8B5E3C]" />
               <span>Ask AI Fashion Stylist</span>
             </button>
+
+            <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Currency</span>
+              <CurrencySelector />
+            </div>
 
             <div style={{ padding: '1rem 1rem 0', borderTop: '1px solid var(--border-subtle)', marginTop: '0.5rem' }}>
               {user ? (

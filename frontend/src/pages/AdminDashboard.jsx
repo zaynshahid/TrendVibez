@@ -23,7 +23,8 @@ import {
   Bell,
   BellOff,
   Eye,
-  Save
+  Save,
+  Percent
 } from 'lucide-react';
 import ActivityLogTab from '../components/ActivityLogTab.jsx';
 import ProductNotificationModal from '../components/ProductNotificationModal.jsx';
@@ -78,6 +79,12 @@ export default function AdminDashboard() {
   // Products filter state
   const [productSearch, setProductSearch] = useState('');
   const [productCatFilter, setProductCatFilter] = useState('All');
+
+  // Discount feature state
+  const [selectedProductIds, setSelectedProductIds] = useState([]);
+  const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [bulkDiscountInput, setBulkDiscountInput] = useState('');
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
 
   // Load admin dashboards data
   const loadData = async () => {
@@ -436,6 +443,41 @@ export default function AdminDashboard() {
     }
   };
 
+  // DISCOUNT ACTIONS
+  const handleApplyBulkDiscount = async (discountValue) => {
+    const pct = parseFloat(discountValue);
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      triggerError('Please enter a discount between 0 and 100.');
+      return;
+    }
+    setBulkSubmitting(true);
+    try {
+      const res = await fetch(`${API_URL}/products/bulk-discount`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ productIds: selectedProductIds, discountPercent: pct })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to apply discount.');
+      setIsDiscountModalOpen(false);
+      setSelectedProductIds([]);
+      setBulkDiscountInput('');
+      triggerSuccess(pct === 0
+        ? `Discount removed from ${selectedProductIds.length} product(s).`
+        : `${pct}% discount applied to ${selectedProductIds.length} product(s)!`
+      );
+      loadData();
+    } catch (err) {
+      triggerError(err.message);
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
+
   // Filter products for local view
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
@@ -443,6 +485,20 @@ export default function AdminDashboard() {
     const matchesCat = productCatFilter === 'All' || p.category === productCatFilter;
     return matchesSearch && matchesCat;
   });
+
+  const toggleProductSelect = (id) => {
+    setSelectedProductIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedProductIds.length === filteredProducts.length) {
+      setSelectedProductIds([]);
+    } else {
+      setSelectedProductIds(filteredProducts.map(p => p.id));
+    }
+  };
 
   if (loading && !stats) {
     return (
@@ -751,15 +807,53 @@ export default function AdminDashboard() {
             </button>
           </div>
 
+          {/* Bulk Action Toolbar (appears when items are selected) */}
+          {selectedProductIds.length > 0 && (
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 px-4 py-3 animate-slide-up">
+              <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                {selectedProductIds.length} product{selectedProductIds.length > 1 ? 's' : ''} selected
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setBulkDiscountInput(''); setIsDiscountModalOpen(true); }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 transition-colors cursor-pointer"
+                >
+                  <Percent className="h-3.5 w-3.5" />
+                  Set Discount
+                </button>
+                <button
+                  onClick={() => handleApplyBulkDiscount('0')}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold px-3 py-1.5 transition-colors hover:bg-slate-50 cursor-pointer"
+                >
+                  Remove Discount
+                </button>
+                <button
+                  onClick={() => setSelectedProductIds([])}
+                  className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Product Listing Table */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-950/60 border-b border-slate-100 dark:border-slate-850 uppercase tracking-widest text-[9px] text-slate-450 font-bold">
                   <tr>
+                    <th className="px-4 py-4 w-10">
+                      <input
+                        type="checkbox"
+                        checked={filteredProducts.length > 0 && selectedProductIds.length === filteredProducts.length}
+                        onChange={toggleSelectAll}
+                        className="rounded cursor-pointer accent-indigo-600"
+                      />
+                    </th>
                     <th className="px-6 py-4">Product Details</th>
                     <th className="px-6 py-4">Category</th>
-                    <th className="px-6 py-4 text-right">Price</th>
+                    <th className="px-6 py-4 text-right">Price / Discount</th>
                     <th className="px-6 py-4 text-center">Stock</th>
                     <th className="px-6 py-4 text-center">Actions</th>
                   </tr>
@@ -767,13 +861,21 @@ export default function AdminDashboard() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-850 font-semibold text-slate-700 dark:text-slate-300">
                   {filteredProducts.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="px-6 py-10 text-center text-slate-500 font-normal">
+                      <td colSpan="6" className="px-6 py-10 text-center text-slate-500 font-normal">
                         No products match your filters.
                       </td>
                     </tr>
                   ) : (
                     filteredProducts.map((p) => (
-                      <tr key={p.id} className="admin-theme-table-row transition-colors">
+                      <tr key={p.id} className={`admin-theme-table-row transition-colors ${selectedProductIds.includes(p.id) ? 'bg-indigo-50/50 dark:bg-indigo-950/10' : ''}`}>
+                        <td className="px-4 py-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedProductIds.includes(p.id)}
+                            onChange={() => toggleProductSelect(p.id)}
+                            className="rounded cursor-pointer accent-indigo-600"
+                          />
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <img src={p.image} alt={p.name} className="h-10 w-8 object-cover rounded bg-slate-100 dark:bg-slate-800" />
@@ -784,7 +886,17 @@ export default function AdminDashboard() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-slate-500">{p.category}</td>
-                        <td className="px-6 py-4 text-right text-slate-900 dark:text-white font-bold">${p.price.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-right">
+                          {p.discountPercent > 0 ? (
+                            <div>
+                              <span className="block text-slate-400 line-through text-[10px] font-normal">${p.price.toFixed(2)}</span>
+                              <span className="block text-emerald-600 dark:text-emerald-400 font-bold">${p.discountedPrice ? p.discountedPrice.toFixed(2) : (p.price * (1 - p.discountPercent / 100)).toFixed(2)}</span>
+                              <span className="inline-block mt-0.5 bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">-{p.discountPercent}% OFF</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-900 dark:text-white font-bold">${p.price.toFixed(2)}</span>
+                          )}
+                        </td>
                         <td className="px-6 py-4 text-center">
                           <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${p.stock <= 5 ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-350'}`}>
                             {p.stock} units
@@ -1671,6 +1783,74 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== BULK DISCOUNT MODAL ==================== */}
+      {isDiscountModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <Percent className="h-4 w-4 text-indigo-500" />
+                <span>Apply Discount ({selectedProductIds.length} Items)</span>
+              </h3>
+              <button onClick={() => setIsDiscountModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                Discount Percentage (%)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={bulkDiscountInput}
+                onChange={(e) => setBulkDiscountInput(e.target.value)}
+                placeholder="e.g. 20"
+                className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 px-3 focus:outline-none focus:border-indigo-600 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 text-xs font-bold"
+              />
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {[10, 15, 20, 25, 30, 50].map(p => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setBulkDiscountInput(p.toString())}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                      bulkDiscountInput === p.toString()
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200'
+                    }`}
+                  >
+                    {p}% OFF
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsDiscountModalOpen(false)}
+                className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyBulkDiscount(bulkDiscountInput)}
+                disabled={bulkSubmitting}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                {bulkSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                <span>Apply Discount</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ShoppingBag, Check, AlertCircle, Sparkles, ShieldCheck, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Check, AlertCircle, Sparkles, ShieldCheck, RefreshCw, Heart } from 'lucide-react';
 import { useCart } from '../context/CartContext.jsx';
+import { useWishlist } from '../context/WishlistContext.jsx';
 import { API_URL } from '../context/AuthContext.jsx';
+import { useCurrency } from '../context/CurrencyContext.jsx';
 import LiquidGlassButton from '../components/LiquidGlassButton.jsx';
+import ProductCard from '../components/ProductCard.jsx';
 
 export default function ProductDetail() {
   const { id } = useParams();
   const { addToCart } = useCart();
+  const { toggleWishlist, isWishlisted } = useWishlist();
+  const { formatPrice } = useCurrency();
 
   const [product, setProduct] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
@@ -19,10 +24,13 @@ export default function ProductDetail() {
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [recommendations, setRecommendations] = useState([]);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(true);
 
   useEffect(() => {
     async function fetchProductDetail() {
       try {
+        setLoading(true);
         const res = await fetch(`${API_URL}/products/${id}`);
         if (!res.ok) {
           throw new Error('Product not found or unavailable');
@@ -43,7 +51,24 @@ export default function ProductDetail() {
         setLoading(false);
       }
     }
+
+    async function fetchRecommendations() {
+      try {
+        setRecommendationsLoading(true);
+        const res = await fetch(`${API_URL}/products/${id}/recommendations`);
+        if (res.ok) {
+          const data = await res.json();
+          setRecommendations(data);
+        }
+      } catch (err) {
+        console.error('Error fetching recommendations:', err);
+      } finally {
+        setRecommendationsLoading(false);
+      }
+    }
+
     fetchProductDetail();
+    fetchRecommendations();
   }, [id]);
 
   const sizeOptions = ['Small', 'Medium', 'Large', 'XL'];
@@ -55,6 +80,27 @@ export default function ProductDetail() {
   const selectedOptionLabel = isSizeVariant ? selectedVariant?.color : hasAdultSizes ? selectedSize : isColorVariant ? selectedVariant?.color : null;
   const effectiveStock = hasVariants ? (selectedVariant ? selectedVariant.stock : 0) : (product?.stock || 0);
   const isOutOfStock = effectiveStock <= 0;
+  const wishlisted = product ? isWishlisted(product.id) : false;
+
+  useEffect(() => {
+    if (product) {
+      window.__CURRENT_PRODUCT__ = {
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        category: product.category,
+        stock: product.stock,
+        selectedSize: selectedOptionLabel || selectedSize || '',
+        selectedVariantId: selectedVariant ? selectedVariant.id : '',
+        quantity
+      };
+    } else {
+      window.__CURRENT_PRODUCT__ = null;
+    }
+    return () => {
+      window.__CURRENT_PRODUCT__ = null;
+    };
+  }, [product, selectedOptionLabel, selectedSize, selectedVariant, quantity]);
 
   const handleQtyChange = (val) => {
     if (!product) return;
@@ -97,22 +143,69 @@ export default function ProductDetail() {
       <div style={{ maxWidth: '1240px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <Link to="/products" className="btn-ghost" style={{ width: 'fit-content' }}><ArrowLeft className="h-4 w-4" /> Back to Catalog</Link>
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'start' }}>
-          <div className="soft-card" style={{ overflow: 'hidden', borderRadius: '28px' }}>
+          <div className="soft-card" style={{ position: 'relative', overflow: 'hidden', borderRadius: '28px' }}>
             <div style={{ aspectRatio: '4/5', overflow: 'hidden', background: 'var(--bg-secondary)' }}>
               <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }} />
             </div>
-            {isOutOfStock && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(44,24,16,0.68)' }}><span style={{ border: '1px solid rgba(255,255,255,0.6)', color: '#fff', padding: '0.45rem 0.8rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>Out of Stock</span></div>}
+            {isOutOfStock && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(44,24,16,0.68)', pointerEvents: 'none', zIndex: 2 }}><span style={{ border: '1px solid rgba(255,255,255,0.6)', color: '#fff', padding: '0.45rem 0.8rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>Out of Stock</span></div>}
           </div>
 
           <div className="soft-card" style={{ padding: '2rem' }}>
             <div style={{ marginBottom: '1rem' }}>
               <span style={{ display: 'inline-flex', fontFamily: 'var(--font-sans)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--coffee)', marginBottom: '0.75rem' }}>{product.category}'s Collection</span>
-              <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 'clamp(1.85rem, 3vw, 2.65rem)', color: 'var(--text-primary)', marginBottom: '0.55rem' }}>{product.name}</h1>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.55rem' }}>
+                <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 'clamp(1.85rem, 3vw, 2.65rem)', color: 'var(--text-primary)' }}>{product.name}</h1>
+                <button
+                  type="button"
+                  onClick={() => toggleWishlist(product)}
+                  aria-label={wishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+                  title={wishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 44,
+                    height: 44,
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    background: wishlisted ? 'rgba(139,58,58,0.1)' : 'rgba(111,78,55,0.06)',
+                    color: wishlisted ? 'var(--error)' : 'var(--text-secondary)',
+                    border: wishlisted ? '1px solid rgba(139,58,58,0.25)' : '1px solid var(--border-color)',
+                    transition: 'transform 0.15s ease, color 0.2s ease, background-color 0.2s ease',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.color = 'var(--error)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.color = wishlisted ? 'var(--error)' : 'var(--text-secondary)';
+                  }}
+                >
+                  <Heart size={20} fill={wishlisted ? 'currentColor' : 'none'} />
+                </button>
+              </div>
               {product.rating && <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}><div style={{ display: 'flex', gap: '0.2rem' }}>{[1,2,3,4,5].map(star => <span key={star} style={{ color: star <= Math.round(product.rating) ? '#C4953A' : 'var(--beige)' }}>★</span>)}</div><span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{product.rating.toFixed(1)}</span><span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>/ 5.0</span></div>}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)', padding: '1rem 0', marginBottom: '1.2rem' }}>
-              <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>${product.price.toFixed(2)}</span>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.8rem', fontWeight: 700, color: product.discountPercent > 0 ? '#B83227' : 'var(--text-primary)' }}>
+                    {formatPrice(product.discountedPrice !== undefined ? product.discountedPrice : (product.discountPercent > 0 ? product.price * (1 - product.discountPercent / 100) : product.price))}
+                  </span>
+                  {product.discountPercent > 0 && (
+                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: '1.05rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>
+                      {formatPrice(product.price)}
+                    </span>
+                  )}
+                  {product.discountPercent > 0 && (
+                    <span style={{ background: '#B83227', color: '#fff', fontSize: '0.65rem', fontWeight: 800, padding: '0.2rem 0.55rem', borderRadius: '999px', letterSpacing: '0.05em' }}>
+                      {Math.round(product.discountPercent)}% OFF
+                    </span>
+                  )}
+                </div>
+              </div>
               <div style={{ textAlign: 'right' }}>
                 {isOutOfStock ? <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.76rem', fontWeight: 700, color: 'var(--error)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Currently sold out{selectedOptionLabel ? ` (${selectedOptionLabel})` : ''}</span> : effectiveStock <= 5 ? <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.72rem', fontWeight: 700, color: '#9a6a15', background: 'rgba(138,105,20,0.1)', padding: '0.35rem 0.6rem', borderRadius: '999px' }}>Hurry, only {effectiveStock} left{selectedOptionLabel ? ` for ${selectedOptionLabel}` : ''}</span> : <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--success)', background: 'rgba(90,122,82,0.12)', padding: '0.35rem 0.6rem', borderRadius: '999px' }}>In stock{selectedOptionLabel ? ` for ${selectedOptionLabel}` : ''}</span>}
               </div>
@@ -148,6 +241,29 @@ export default function ProductDetail() {
             </div>
           </div>
         </motion.div>
+
+        {/* Recommended for You Section */}
+        <div style={{ marginTop: '4rem', borderTop: '1px solid var(--border-color)', paddingTop: '3rem' }}>
+          <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '2rem', color: 'var(--text-primary)', marginBottom: '2rem', textAlign: 'center' }}>
+            Recommended for You
+          </h2>
+          {recommendationsLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem 0' }}>
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-[var(--brown-primary)] border-t-transparent" />
+            </div>
+          ) : recommendations.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.5rem' }}>
+              {recommendations.map((rec) => (
+                <ProductCard key={rec.id} product={rec} />
+              ))}
+            </div>
+          ) : (
+            <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)', fontSize: '0.95rem' }}>
+              No similar products found.
+            </p>
+          )}
+        </div>
+
       </div>
     </div>
   );

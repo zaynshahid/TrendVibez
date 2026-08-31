@@ -79,8 +79,24 @@ export default function Signup() {
   };
 
   return (
-    <div className="auth-shell flex min-h-[80vh] items-center justify-center px-4 sm:px-6 lg:px-8 py-10 animate-slide-up">
-      <div className="auth-card w-full max-w-md space-y-8 p-8 rounded-[2rem] border border-transparent">
+    <div
+      className="auth-shell flex min-h-[90vh] items-center justify-center px-4 sm:px-6 lg:px-8 py-12 animate-slide-up"
+      style={{
+        backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.3), rgba(15, 23, 42, 0.3)), url('/images/signup-bg.jpg')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed'
+      }}
+    >
+      <div
+        className="auth-card w-full max-w-md space-y-8 p-8 rounded-[2rem] border border-white/40 shadow-2xl"
+        style={{
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          backgroundColor: 'rgba(255, 250, 244, 0.90)'
+        }}
+      >
         {/* Header */}
         <div className="text-center space-y-2">
           <Link to="/" className="inline-flex items-center justify-center gap-2 text-2xl font-black text-brown-dark">
@@ -183,7 +199,7 @@ export default function Signup() {
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-brown-primary/20"></div>
           </div>
-          <span className="relative bg-rose-50/90 px-3 text-[10px] uppercase font-bold tracking-[0.25em] text-brown-dark">
+          <span className="relative bg-[#FAF5EE] px-3 text-[10px] uppercase font-bold tracking-[0.25em] text-brown-dark rounded-full">
             Or Sign Up with
           </span>
         </div>

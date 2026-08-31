@@ -206,7 +206,18 @@ export function CartProvider({ children }) {
     localStorage.removeItem('tv_guest_cart');
   };
 
-  const cartTotal = cart.reduce((acc, item) => acc + (item.product?.price || 0) * item.quantity, 0);
+  const getItemEffectivePrice = (item) => {
+    if (!item.product) return 0;
+    if (item.product.discountedPrice !== undefined && item.product.discountedPrice !== null) {
+      return item.product.discountedPrice;
+    }
+    if (item.product.discountPercent && item.product.discountPercent > 0) {
+      return item.product.price * (1 - item.product.discountPercent / 100);
+    }
+    return item.product.price || 0;
+  };
+
+  const cartTotal = cart.reduce((acc, item) => acc + getItemEffectivePrice(item) * item.quantity, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
   return (

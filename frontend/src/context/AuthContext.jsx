@@ -141,6 +141,34 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
+  const forgotPassword = async (email) => {
+    const res = await fetch(`${API_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Forgot password request failed');
+    }
+    return data;
+  };
+
+  const resetPassword = async (token, newPassword) => {
+    const res = await fetch(`${API_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, newPassword })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Reset password failed');
+    }
+    return data;
+  };
+
   const value = {
     user,
     token,
@@ -150,6 +178,8 @@ export function AuthProvider({ children }) {
     googleLogin,
     logout,
     updateProfile,
+    forgotPassword,
+    resetPassword,
     isAdmin: user?.role === 'admin'
   };
 
