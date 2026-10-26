@@ -8,9 +8,9 @@ const router = express.Router();
 
 // GET ALL PRODUCTS (with filtering, sorting, searching, discounted)
 router.get('/', async (req, res) => {
-  const { category, q, sort, minPrice, maxPrice, minRating, inStock, size, discounted } = req.query;
+  const { category, subcategory, q, sort, minPrice, maxPrice, minRating, inStock, size, discounted } = req.query;
   try {
-    const products = await getAllProducts({ category, q, sort, minPrice, maxPrice, minRating, inStock, size, discounted });
+    const products = await getAllProducts({ category, subcategory, q, sort, minPrice, maxPrice, minRating, inStock, size, discounted });
     res.json(products);
   } catch (error) {
     console.error('Get products error:', error);
@@ -87,7 +87,7 @@ router.get('/:id/recommendations', async (req, res) => {
 
 // CREATE PRODUCT (Admin Only)
 router.post('/', requireAdmin, async (req, res) => {
-  const { name, description, price, discountPercent, category, image, stock, rating, variants } = req.body;
+  const { name, description, price, discountPercent, category, subcategory, brand, gender, image, stock, rating, variants } = req.body;
 
   if (!name || !description || price === undefined || !category || !image || stock === undefined) {
     return res.status(400).json({ message: 'All product fields are required' });
@@ -115,6 +115,9 @@ router.post('/', requireAdmin, async (req, res) => {
       price: parsedPrice,
       discountPercent: parsedDiscount,
       category,
+      subcategory: subcategory || '',
+      brand: brand || '',
+      gender: gender || '',
       image,
       stock: parsedStock,
       rating: rating !== undefined ? parseFloat(rating) : 4.5,
@@ -141,7 +144,7 @@ router.post('/', requireAdmin, async (req, res) => {
 
 // UPDATE PRODUCT (Admin Only)
 router.put('/:id', requireAdmin, async (req, res) => {
-  const { name, description, price, discountPercent, category, image, stock, rating, variants } = req.body;
+  const { name, description, price, discountPercent, category, subcategory, brand, gender, image, stock, rating, variants } = req.body;
   try {
     const product = await getProductById(req.params.id);
     if (!product) {
@@ -153,6 +156,9 @@ router.put('/:id', requireAdmin, async (req, res) => {
     if (name !== undefined) updates.name = name;
     if (description !== undefined) updates.description = description;
     if (category !== undefined) updates.category = category;
+    if (subcategory !== undefined) updates.subcategory = subcategory;
+    if (brand !== undefined) updates.brand = brand;
+    if (gender !== undefined) updates.gender = gender;
     if (image !== undefined) updates.image = image;
 
     if (price !== undefined) {

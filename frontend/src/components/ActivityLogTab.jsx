@@ -14,8 +14,12 @@ import {
   User,
   Database,
   Globe,
-  Mail
+  Mail,
+  RefreshCw
 } from 'lucide-react';
+import InstagramIcon from './InstagramIcon.jsx';
+import FacebookIcon from './FacebookIcon.jsx';
+
 
 export default function ActivityLogTab() {
   const { token } = useAuth();
@@ -139,6 +143,12 @@ export default function ActivityLogTab() {
         return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800';
       case 'SEND_EMAIL':
         return 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 border border-teal-200 dark:border-teal-800';
+      case 'PUBLISH_INSTAGRAM_POST':
+      case 'PUBLISH_INSTAGRAM_CAROUSEL':
+        return 'bg-gradient-to-r from-rose-500/15 via-purple-500/15 to-amber-500/15 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800';
+      case 'PUBLISH_FACEBOOK_POST':
+      case 'PUBLISH_FACEBOOK_MULTI':
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800';
       default:
         return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
     }
@@ -167,9 +177,21 @@ export default function ActivityLogTab() {
             Comprehensive history of platform administrative operations, updates, and configuration actions.
           </p>
         </div>
-        <div className="activity-log-count-badge">
-          <Database className="h-4 w-4" />
-          <span>{total} Log Entries Recorded</span>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={fetchLogs}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-brown-faint bg-brown-faint/80 text-brown-dark hover:bg-brown-faint text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+            title="Refresh logs"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 text-brown-primary ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+          <div className="activity-log-count-badge">
+            <Database className="h-4 w-4" />
+            <span>{total} Log Entries Recorded</span>
+          </div>
         </div>
       </div>
 
@@ -318,6 +340,30 @@ export default function ActivityLogTab() {
                             <div className="flex items-center gap-1.5" title={recipient}>
                               <Mail className="h-3 w-3 text-teal-500 shrink-0" />
                               <span className="truncate">{recipient}</span>
+                            </div>
+                          ) : <span className="truncate">{log.recordId || '-'}</span>;
+                        })() : (log.action === 'PUBLISH_INSTAGRAM_POST' || log.action === 'PUBLISH_INSTAGRAM_CAROUSEL') ? (() => {
+                          const nd = parseJsonData(log.newData);
+                          const pName = nd?.productName || (nd?.productNames && nd.productNames.join(', '));
+                          const count = nd?.productCount;
+                          return pName ? (
+                            <div className="flex items-center gap-1.5" title={`${pName} (Post ID: ${nd?.postId || log.recordId})`}>
+                              <InstagramIcon size={13} color="#e1306c" />
+                              <span className="truncate font-bold text-slate-800 dark:text-slate-100">
+                                {count ? `Carousel (${count} items): ${pName}` : pName}
+                              </span>
+                            </div>
+                          ) : <span className="truncate">{log.recordId || '-'}</span>;
+                        })() : (log.action === 'PUBLISH_FACEBOOK_POST' || log.action === 'PUBLISH_FACEBOOK_MULTI') ? (() => {
+                          const nd = parseJsonData(log.newData);
+                          const pName = nd?.productName || (nd?.productNames && nd.productNames.join(', '));
+                          const count = nd?.productCount;
+                          return pName ? (
+                            <div className="flex items-center gap-1.5" title={`${pName} (Post ID: ${nd?.postId || log.recordId})`}>
+                              <FacebookIcon size={13} color="#1877F2" />
+                              <span className="truncate font-bold text-slate-800 dark:text-slate-100">
+                                {count ? `Gallery (${count} photos): ${pName}` : pName}
+                              </span>
                             </div>
                           ) : <span className="truncate">{log.recordId || '-'}</span>;
                         })() : (

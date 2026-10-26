@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import ProductCard from '../components/ProductCard.jsx';
 import { API_URL } from '../context/AuthContext.jsx';
+import { getSubcategoriesForCategory } from '../constants/categories.js';
 
 // ─── Utility ────────────────────────────────────────────────────────────────
 function StarRating({ value, onChange }) {
@@ -83,14 +84,15 @@ export default function Products() {
 
   const [searchTerm, setSearchTerm] = useState(searchParams.get('q') || '');
 
-  const activeCategory  = searchParams.get('category')  || 'All';
-  const activeSort      = searchParams.get('sort')       || 'newest';
-  const activeQuery     = searchParams.get('q')          || '';
-  const activeMinPrice  = searchParams.get('minPrice')   || '';
-  const activeMaxPrice  = searchParams.get('maxPrice')   || '';
-  const activeMinRating = searchParams.get('minRating')  || '';
-  const activeInStock   = searchParams.get('inStock')    || '';
-  const activeSize      = searchParams.get('size')       || '';
+  const activeCategory    = searchParams.get('category')    || 'All';
+  const activeSubcategory = searchParams.get('subcategory') || '';
+  const activeSort        = searchParams.get('sort')        || 'newest';
+  const activeQuery       = searchParams.get('q')           || '';
+  const activeMinPrice    = searchParams.get('minPrice')    || '';
+  const activeMaxPrice    = searchParams.get('maxPrice')    || '';
+  const activeMinRating   = searchParams.get('minRating')   || '';
+  const activeInStock     = searchParams.get('inStock')     || '';
+  const activeSize        = searchParams.get('size')        || '';
 
   useEffect(() => {
     setDraftMinPrice(activeMinPrice);
@@ -106,6 +108,7 @@ export default function Products() {
       try {
         const queryParts = [];
         if (activeCategory && activeCategory !== 'All') queryParts.push(`category=${encodeURIComponent(activeCategory)}`);
+        if (activeSubcategory) queryParts.push(`subcategory=${encodeURIComponent(activeSubcategory)}`);
         if (activeQuery) queryParts.push(`q=${encodeURIComponent(activeQuery)}`);
         if (activeSort) queryParts.push(`sort=${encodeURIComponent(activeSort)}`);
         if (activeMinPrice !== '') queryParts.push(`minPrice=${encodeURIComponent(activeMinPrice)}`);
@@ -126,7 +129,7 @@ export default function Products() {
       }
     }
     fetchFilteredProducts();
-  }, [activeCategory, activeSort, activeQuery, activeMinPrice, activeMaxPrice, activeMinRating, activeInStock, activeSize]);
+  }, [activeCategory, activeSubcategory, activeSort, activeQuery, activeMinPrice, activeMaxPrice, activeMinRating, activeInStock, activeSize]);
 
   useEffect(() => {
     async function fetchSizeOptions() {
@@ -207,7 +210,7 @@ export default function Products() {
     setSearchParams({});
   };
 
-  const defaultCategoryList = ['All', 'Men', 'Women', 'Kids', 'Footwear'];
+  const defaultCategoryList = ['All', 'Men', 'Women', 'Kids', 'Watches', 'Footwear'];
   const allCategoryOptions = ['All'];
   const categorySet = new Set(['all']);
   
@@ -225,6 +228,7 @@ export default function Products() {
   const activeFilterChips = [];
   if (activeQuery) activeFilterChips.push({ label: `"${activeQuery}"`, key: 'q' });
   if (activeCategory !== 'All') activeFilterChips.push({ label: activeCategory, key: 'category' });
+  if (activeSubcategory) activeFilterChips.push({ label: `Type: ${activeSubcategory}`, key: 'subcategory' });
   if (activeMinPrice) activeFilterChips.push({ label: `Min $${activeMinPrice}`, key: 'minPrice' });
   if (activeMaxPrice) activeFilterChips.push({ label: `Max $${activeMaxPrice}`, key: 'maxPrice' });
   if (activeMinRating) activeFilterChips.push({ label: `${activeMinRating}+ ★`, key: 'minRating' });
@@ -339,7 +343,16 @@ export default function Products() {
                     key={cat}
                     id={`top-cat-${cat.toLowerCase()}`}
                     type="button"
-                    onClick={() => updateParam('category', cat === 'All' ? '' : cat)}
+                    onClick={() => {
+                      const newParams = new URLSearchParams(searchParams);
+                      if (cat === 'All' || !cat) {
+                        newParams.delete('category');
+                      } else {
+                        newParams.set('category', cat);
+                      }
+                      newParams.delete('subcategory');
+                      setSearchParams(newParams);
+                    }}
                     className={`cat-tab ${isActive ? 'cat-tab-active' : ''}`}
                     style={{
                       display: 'inline-flex',
@@ -359,6 +372,60 @@ export default function Products() {
                 );
               })}
             </div>
+
+            {/* Subcategory Pills Bar (Shown when a category is selected) */}
+            {activeCategory !== 'All' && getSubcategoriesForCategory(activeCategory).length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', borderTop: '1px dashed var(--border-subtle)', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'var(--font-sans)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginRight: '0.2rem' }}>
+                    Type / Subcategory:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => updateParam('subcategory', '')}
+                    style={{
+                      padding: '0.3rem 0.85rem',
+                      borderRadius: '999px',
+                      fontSize: '0.72rem',
+                      fontFamily: 'var(--font-sans)',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: !activeSubcategory ? '1px solid var(--brown-primary)' : '1px solid var(--border-color)',
+                      background: !activeSubcategory ? 'rgba(111,78,55,0.12)' : 'var(--bg-primary)',
+                      color: !activeSubcategory ? 'var(--brown-primary)' : 'var(--text-secondary)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    All {activeCategory}
+                  </button>
+                  {getSubcategoriesForCategory(activeCategory).map(sub => {
+                    const isSubActive = activeSubcategory.toLowerCase() === sub.toLowerCase();
+                    return (
+                      <button
+                        key={sub}
+                        type="button"
+                        onClick={() => updateParam('subcategory', isSubActive ? '' : sub)}
+                        style={{
+                          padding: '0.3rem 0.85rem',
+                          borderRadius: '999px',
+                          fontSize: '0.72rem',
+                          fontFamily: 'var(--font-sans)',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          border: isSubActive ? '1px solid var(--brown-primary)' : '1px solid var(--border-color)',
+                          background: isSubActive ? 'var(--brown-primary)' : 'var(--bg-primary)',
+                          color: isSubActive ? '#ffffff' : 'var(--text-secondary)',
+                          boxShadow: isSubActive ? '0 2px 8px rgba(111,78,55,0.2)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {sub}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -409,7 +476,16 @@ export default function Products() {
                           key={cat}
                           id={`sidebar-cat-${cat.toLowerCase()}`}
                           type="button"
-                          onClick={() => updateParam('category', cat === 'All' ? '' : cat)}
+                          onClick={() => {
+                            const newParams = new URLSearchParams(searchParams);
+                            if (cat === 'All' || !cat) {
+                              newParams.delete('category');
+                            } else {
+                              newParams.set('category', cat);
+                            }
+                            newParams.delete('subcategory');
+                            setSearchParams(newParams);
+                          }}
                           style={{
                             display: 'flex',
                             alignItems: 'center',

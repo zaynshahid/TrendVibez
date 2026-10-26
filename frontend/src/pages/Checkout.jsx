@@ -7,7 +7,7 @@ import { useCurrency } from '../context/CurrencyContext.jsx';
 import LiquidGlassButton from '../components/LiquidGlassButton.jsx';
 
 export default function Checkout() {
-  const { cart, cartTotal } = useCart();
+  const { cart, cartTotal, getItemEffectivePrice } = useCart();
   const { user } = useAuth();
   const { formatPrice } = useCurrency();
   const navigate = useNavigate();
@@ -141,6 +141,7 @@ export default function Checkout() {
           <div className="divide-y divide-brown-faint max-h-60 overflow-y-auto no-scrollbar">
             {cart.map((item) => {
               const sizeLabel = item.selectedColor || item.variant?.color;
+              const effectivePrice = getItemEffectivePrice(item);
               return (
                 <div key={`${item.productId}-${item.variantId || ''}`} className="flex justify-between py-3 text-xs">
                   <div className="space-y-0.5">
@@ -153,11 +154,11 @@ export default function Checkout() {
                       </span>
                     )}
                     <span className="font-semibold text-brown-dark/80">
-                      Qty: {item.quantity} &times; {formatPrice(item.product?.price || 0)}
+                      Qty: {item.quantity} &times; {formatPrice(effectivePrice)}
                     </span>
                   </div>
                   <span className="font-extrabold text-brown-dark">
-                    {formatPrice((item.product?.price || 0) * item.quantity)}
+                    {formatPrice(effectivePrice * item.quantity)}
                   </span>
                 </div>
               );

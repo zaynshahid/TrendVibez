@@ -1,11 +1,24 @@
 {
+  "name": "trendvibz",
+  "version": "1.0.0",
+  "type": "module",
   "scripts": {
-    "backend": "npm.cmd --prefix backend run dev",
-    "frontend": "npm.cmd --prefix frontend run dev",
-    "frontend:host": "npm.cmd --prefix frontend run dev -- --host 0.0.0.0"
+    "build": "cd frontend && npm install && npm run build",
+    "start": "node backend/src/server.js",
+    "backend": "npm --prefix backend run dev",
+    "frontend": "npm --prefix frontend run dev",
+    "frontend:host": "npm --prefix frontend run dev -- --host 0.0.0.0"
   },
   "dependencies": {
-    "mysql2": "^3.23.1",
-    "nodemailer": "^9.0.3"
+    "@google/genai": "^2.17.1",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "google-auth-library": "^9.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^7.7.0",
+    "nodemailer": "^9.0.3",
+    "uuid": "^10.0.0"
   }
 }

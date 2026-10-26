@@ -36,7 +36,7 @@ async function optionalAuth(req, res, next) {
 
 /**
  * POST /api/chat
- * Handle chat inquiries with Google Gemini grounded in MySQL database.
+ * Handle chat inquiries with Google Gemini grounded in database.
  */
 router.post('/', optionalAuth, async (req, res) => {
   try {

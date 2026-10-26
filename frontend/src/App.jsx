@@ -34,6 +34,44 @@ import Dashboard from './pages/Dashboard.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import Support from './pages/Support.jsx';
 
+import { useLocation } from 'react-router-dom';
+
+/**
+ * Tracks and stores social referral acquisition source (Instagram, Facebook, or Direct)
+ */
+function ReferralTracker() {
+  const location = useLocation();
+
+  React.useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(location.search);
+      const refParam = (searchParams.get('source') || searchParams.get('ref') || searchParams.get('utm_source') || searchParams.get('platform') || '').toLowerCase();
+      const hasFbclid = searchParams.has('fbclid');
+      const hasIgshid = searchParams.has('igshid') || searchParams.has('ig_mid');
+      const referrer = (document.referrer || '').toLowerCase();
+
+      let detected = null;
+      if (refParam.includes('insta') || hasIgshid || referrer.includes('instagram.com')) {
+        detected = 'Instagram';
+      } else if (refParam.includes('fb') || refParam.includes('face') || hasFbclid || referrer.includes('facebook.com') || referrer.includes('fb.me') || referrer.includes('messenger.com')) {
+        detected = 'Facebook';
+      } else if (refParam) {
+        detected = refParam.charAt(0).toUpperCase() + refParam.slice(1);
+      }
+
+      if (detected) {
+        sessionStorage.setItem('tv_referral_source', detected);
+        localStorage.setItem('tv_last_platform_source', detected);
+        document.cookie = `tv_source=${encodeURIComponent(detected)}; path=/; max-age=2592000; SameSite=Lax`;
+      }
+    } catch (e) {
+      console.warn('Referral tracking error:', e);
+    }
+  }, [location.search]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -41,6 +79,7 @@ export default function App() {
         <CartProvider>
           <WishlistProvider>
             <BrowserRouter>
+            <ReferralTracker />
             <ScrollToTop />
             <div
               className="flex flex-col min-h-screen"
@@ -57,6 +96,7 @@ export default function App() {
                 <Route path="/about" element={<About />} />
                 <Route path="/products" element={<Products />} />
                 <Route path="/products/:id" element={<ProductDetail />} />
+                <Route path="/product/:id" element={<ProductDetail />} />
                 <Route path="/wishlist" element={<Wishlist />} />
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/support" element={<Support />} />

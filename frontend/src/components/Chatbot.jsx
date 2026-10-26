@@ -29,7 +29,6 @@ const QUICK_PROMPTS = [
   { label: "🧥 Men's Collection", prompt: "Show me the top picks in the Men's clothing category with prices and available sizes." },
   { label: "👗 Women's Collection", prompt: "What women's dresses and apparel are currently in stock?" },
   { label: '🛍️ Add to Cart', prompt: 'Can you recommend a great outfit and add it to my cart?' },
-  { label: '📦 Track My Order', prompt: 'Can you show me the status and items of my recent order?' },
   { label: '🔄 Returns & Shipping', prompt: "What is TrendVibe's shipping time, delivery fee, and return policy?" }
 ];
 
@@ -332,7 +331,7 @@ export default function Chatbot() {
     setMessages([]);
     try {
       sessionStorage.removeItem(chatStorageKey);
-    } catch {}
+    } catch { }
   };
 
   const handleProductClick = (productId) => {
@@ -584,7 +583,7 @@ export default function Chatbot() {
                       {user ? `Welcome back, ${user.name.split(' ')[0]}!` : 'Welcome to TrendVibe!'}
                     </h4>
                     <p className="text-xs text-[#6B5B4E] leading-relaxed max-w-[280px] mx-auto">
-                      I'm your AI fashion stylist. You can ask for recommendations, check stock, look up orders, or even ask me to add items to your shopping cart!
+                      I'm your AI fashion stylist. You can ask for recommendations, check stock, or even ask me to add items to your shopping cart!
                     </p>
                   </div>
 
@@ -616,13 +615,12 @@ export default function Chatbot() {
                   className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                 >
                   <div
-                    className={`max-w-[88%] rounded-2xl p-3.5 shadow-xs ${
-                      msg.role === 'user'
-                        ? 'bg-gradient-to-r from-[#6F4E37] to-[#5C3F2C] text-[#F7F2EB] rounded-br-xs'
-                        : msg.isError
+                    className={`max-w-[88%] rounded-2xl p-3.5 shadow-xs ${msg.role === 'user'
+                      ? 'bg-gradient-to-r from-[#6F4E37] to-[#5C3F2C] text-[#F7F2EB] rounded-br-xs'
+                      : msg.isError
                         ? 'bg-red-50/90 border border-red-200 text-red-800 rounded-bl-xs'
                         : 'bg-white border border-[#DDD1C3] text-[#2C1810] rounded-bl-xs'
-                    }`}
+                      }`}
                   >
                     {/* User message is plain text, AI message is formatted */}
                     {msg.role === 'user' ? (
@@ -746,7 +744,7 @@ export default function Chatbot() {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={user ? `Ask about orders, products, add to cart...` : `Ask about jackets, sizes, add to cart...`}
+                  placeholder={user ? `Ask about products, sizes, add to cart...` : `Ask about jackets, sizes, add to cart...`}
                   disabled={isLoading}
                   className="flex-1 bg-transparent border-none outline-none text-xs text-[#2C1810] placeholder:text-[#9A8478] py-1.5"
                 />
@@ -754,11 +752,10 @@ export default function Chatbot() {
                   type="submit"
                   disabled={!inputValue.trim() || isLoading}
                   aria-label="Send message"
-                  className={`p-2 rounded-xl flex items-center justify-center transition-all ${
-                    inputValue.trim() && !isLoading
-                      ? 'bg-[#6F4E37] hover:bg-[#3B2A22] text-white shadow-sm'
-                      : 'bg-[#EFE7DB] text-[#9A8478] cursor-not-allowed'
-                  }`}
+                  className={`p-2 rounded-xl flex items-center justify-center transition-all ${inputValue.trim() && !isLoading
+                    ? 'bg-[#6F4E37] hover:bg-[#3B2A22] text-white shadow-sm'
+                    : 'bg-[#EFE7DB] text-[#9A8478] cursor-not-allowed'
+                    }`}
                 >
                   <Send size={15} />
                 </button>

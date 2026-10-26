@@ -19,10 +19,18 @@ const CurrencyContext = createContext(null);
 
 export function CurrencyProvider({ children }) {
   const [currency, setCurrencyState] = useState(
-    () => localStorage.getItem(STORAGE_KEY) || DEFAULT_CURRENCY
+    () => {
+      const savedCurrency = localStorage.getItem(STORAGE_KEY);
+      return CURRENCIES[savedCurrency] ? savedCurrency : DEFAULT_CURRENCY;
+    }
   );
   const [rates, setRates] = useState({ USD: 1, PKR: 278.5, EUR: 0.92, GBP: 0.79, AED: 3.67, SAR: 3.75 });
   const [ratesLoaded, setRatesLoaded] = useState(false);
+  const [ratesMetadata, setRatesMetadata] = useState({
+    updatedAt: null,
+    source: 'fallback',
+    stale: false
+  });
 
   // Fetch live rates once on mount
   useEffect(() => {
@@ -34,11 +42,21 @@ export function CurrencyProvider({ children }) {
         const data = await res.json();
         if (!cancelled && data?.rates) {
           setRates(data.rates);
+          setRatesMetadata({
+            updatedAt: data.updatedAt,
+            source: data.source || 'live',
+            stale: data.stale || false
+          });
           setRatesLoaded(true);
         }
       } catch (err) {
         // Silently fall back to hardcoded rates already set as default state
         console.warn('[Currency] Using fallback rates:', err.message);
+        setRatesMetadata({
+          updatedAt: null,
+          source: 'fallback',
+          stale: false
+        });
         setRatesLoaded(true);
       }
     }
@@ -59,7 +77,8 @@ export function CurrencyProvider({ children }) {
    */
   const convert = useCallback((priceUsd) => {
     const rate = rates[currency] ?? 1;
-    return parseFloat(priceUsd) * rate;
+    const amount = Number(priceUsd);
+    return Number.isFinite(amount) ? amount * rate : 0;
   }, [rates, currency]);
 
   /**
@@ -82,10 +101,12 @@ export function CurrencyProvider({ children }) {
   }, [convert, currency]);
 
   const formatPriceWithCurrency = useCallback((priceUsd, currencyCode, currencyRate) => {
-    const rate = currencyRate ?? 1;
-    const converted = parseFloat(priceUsd) * rate;
-    const meta = CURRENCIES[currencyCode] || CURRENCIES.USD;
-    const decimals = currencyCode === 'PKR' ? 0 : 2;
+    const resolvedCurrency = CURRENCIES[currencyCode] ? currencyCode : DEFAULT_CURRENCY;
+    const rate = Number(currencyRate) > 0 ? Number(currencyRate) : 1;
+    const amount = Number(priceUsd);
+    const converted = Number.isFinite(amount) ? amount * rate : 0;
+    const meta = CURRENCIES[resolvedCurrency];
+    const decimals = resolvedCurrency === 'PKR' ? 0 : 2;
     const formatted = converted.toLocaleString('en-US', {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
@@ -93,12 +114,31 @@ export function CurrencyProvider({ children }) {
     return `${meta.symbol}${formatted}`;
   }, []);
 
+  /**
+   * Get human-readable time since rates were updated
+   */
+  const getRatesAge = useCallback(() => {
+    if (!ratesMetadata.updatedAt) return 'Unknown';
+    const updated = new Date(ratesMetadata.updatedAt);
+    const now = new Date();
+    const minutes = Math.floor((now - updated) / 60000);
+    
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }, [ratesMetadata.updatedAt]);
+
   return (
     <CurrencyContext.Provider value={{
       currency,
       setCurrency,
       rates,
       ratesLoaded,
+      ratesMetadata,
+      getRatesAge,
       convert,
       formatPrice,
       formatPriceWithCurrency,

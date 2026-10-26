@@ -1,0 +1,11 @@
+{
+  "ignore": [
+    "data/rates.json",
+    "node_modules/",
+    ".git/"
+  ],
+  "ext": "js",
+  "watch": [
+    "src/"
+  ]
+}

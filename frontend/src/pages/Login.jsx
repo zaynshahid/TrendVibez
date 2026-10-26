@@ -93,11 +93,11 @@ export default function Login() {
             <span>TrendVibe</span>
           </Link>
           <h2 className="text-3xl font-bold tracking-tight text-brown-dark">
-            {isForgotMode ? 'Forgot Password' : 'Welcome Back'}
+            {isForgotMode ? 'Forgot Password' : ''}
           </h2>
           <p className="text-sm text-text-secondary">
-            {isForgotMode 
-              ? "Enter your email address and we'll send you a link to reset your password." 
+            {isForgotMode
+              ? "Enter your email address and we'll send you a link to reset your password."
               : 'Sign in to access your cart, orders, and dashboard.'}
           </p>
         </div>

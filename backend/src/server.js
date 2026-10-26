@@ -3,10 +3,14 @@
 import './env.js';
 import app from './app.js';
 import { initDb } from './db.js';
+import { startCurrencyScheduler } from './services/scheduler.js';
 
 const PORT = process.env.PORT || 5000;
 
 await initDb();
+
+// Start currency rate scheduler
+startCurrencyScheduler();
 
 const server = app.listen(PORT, () => {
   console.log('=========================================');

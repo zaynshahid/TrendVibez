@@ -1,6 +1,6 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { getCartByUserId, createOrder, getOrders, getOrderById, updateOrderStatus, deleteOrder, query } from '../db.js';
+import { getCartByUserId, createOrder, getOrders, getOrderById, updateOrderStatus, approveRefund, deleteOrder, query } from '../db.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import {
   sendOrderPlacedEmail,
@@ -10,15 +10,26 @@ import {
   sendDeliveredEmail,
   sendCancelledEmail,
   sendLowStockEmail,
-  sendAdminOrderPlacedEmail
+  sendAdminOrderPlacedEmail,
+  sendRefundApprovedEmail
 } from '../services/emailService.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
 
 const router = express.Router();
 
+function getEffectiveProductPrice(product) {
+  const price = Number(product?.price);
+  const discountPercent = Number(product?.discountPercent || 0);
+  if (!Number.isFinite(price)) return 0;
+  if (discountPercent > 0) {
+    return parseFloat((price * (1 - discountPercent / 100)).toFixed(2));
+  }
+  return price;
+}
+
 // CREATE ORDER (Checkout & Pay)
 router.post('/', requireAuth, async (req, res) => {
-  const { name, email, address, paymentMethod, currencyCode, currencyRate } = req.body;
+  const { name, email, address, paymentMethod, currencyCode, currencyRate, platform } = req.body;
 
   if (!name || !email || !address) {
     return res.status(400).json({ message: 'Delivery name, email, and address are required' });
@@ -28,6 +39,15 @@ router.post('/', requireAuth, async (req, res) => {
     const userCart = await getCartByUserId(req.user.id);
     if (userCart.length === 0) {
       return res.status(400).json({ message: 'Cannot place order: Cart is empty' });
+    }
+
+    // Determine normalized acquisition platform
+    let orderPlatform = 'Direct';
+    if (typeof platform === 'string') {
+      const pLower = platform.trim().toLowerCase();
+      if (pLower.includes('insta')) orderPlatform = 'Instagram';
+      else if (pLower.includes('fb') || pLower.includes('face')) orderPlatform = 'Facebook';
+      else if (pLower) orderPlatform = platform.trim();
     }
 
     const orderItems = [];
@@ -44,17 +64,19 @@ router.post('/', requireAuth, async (req, res) => {
           message: `Insufficient stock for product '${product.name}'. Only ${product.stock} left, requested ${item.quantity}.`
         });
       }
+
+      const itemPrice = getEffectiveProductPrice(product);
       
       orderItems.push({
         productId: product.id,
         name: product.name,
-        price: product.price,
+        price: itemPrice,
         quantity: item.quantity,
         image: product.image,
         selectedColor: item.selectedColor || ''
       });
 
-      totalAmount += product.price * item.quantity;
+      totalAmount += itemPrice * item.quantity;
     }
 
     // Generate a random invoice reference: TV-XXXXXX
@@ -78,6 +100,7 @@ router.post('/', requireAuth, async (req, res) => {
       address,
       paymentStatus: isCod ? 'Pending' : 'Paid',
       paymentMethod: paymentMethod || 'Mock Card',
+      platform: orderPlatform,
       createdAt: new Date().toISOString(),
       items: orderItems
     });
@@ -266,6 +289,79 @@ router.put('/:id/status', requireAdmin, async (req, res) => {
   }
 });
 
+// APPROVE REFUND (Admin Only)
+router.post('/:id/refund', requireAdmin, async (req, res) => {
+  const { refundAmount } = req.body;
+  const parsedAmount = parseFloat(refundAmount);
+
+  if (!refundAmount || isNaN(parsedAmount) || parsedAmount <= 0) {
+    return res.status(400).json({ message: 'A valid refund amount greater than 0 is required.' });
+  }
+
+  try {
+    const order = await getOrderById(req.params.id);
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    if (order.refundStatus === 'Approved') {
+      return res.status(400).json({ message: 'A refund has already been approved for this order.' });
+    }
+
+    if (parsedAmount > order.totalAmount) {
+      return res.status(400).json({ message: `Refund amount cannot exceed the order total of $${order.totalAmount.toFixed(2)}.` });
+    }
+
+    const updatedOrder = await approveRefund(req.params.id, parsedAmount);
+
+    // Log the refund approval
+    logActivity({
+      adminId: req.user.id,
+      adminName: req.user.name,
+      action: 'APPROVE_REFUND',
+      module: 'orders',
+      recordId: order.id,
+      oldData: { orderReference: order.orderReference, refundStatus: order.refundStatus || 'None' },
+      newData: { orderReference: order.orderReference, refundStatus: 'Approved', refundAmount: parsedAmount },
+      ipAddress: getClientIp(req)
+    });
+
+    // Send refund approval email in the background
+    const adminIdForLog = req.user.id;
+    const adminNameForLog = req.user.name;
+    const ipForLog = getClientIp(req);
+    (async () => {
+      try {
+        const emailResult = await sendRefundApprovedEmail(updatedOrder, parsedAmount);
+        logActivity({
+          adminId: adminIdForLog,
+          adminName: adminNameForLog,
+          action: 'SEND_EMAIL',
+          module: 'email',
+          recordId: updatedOrder.orderReference || updatedOrder.id,
+          newData: {
+            type: 'REFUND_APPROVED',
+            recipient: updatedOrder.email,
+            customerName: updatedOrder.name,
+            orderReference: updatedOrder.orderReference,
+            refundAmount: parsedAmount,
+            subject: `Your refund has been approved – ${updatedOrder.orderReference || updatedOrder.id}`,
+            status: emailResult?.success ? 'sent' : 'failed'
+          },
+          ipAddress: ipForLog
+        });
+      } catch (err) {
+        console.error('⚠️ [Email Error] Refund approval email failed:', err);
+      }
+    })();
+
+    res.json(updatedOrder);
+  } catch (error) {
+    console.error('Approve refund error:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 // DELETE/CANCEL ORDER (Admin Only)
 router.delete('/:id', requireAdmin, async (req, res) => {
   try {
@@ -294,3 +390,4 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 });
 
 export default router;
+

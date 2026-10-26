@@ -7,7 +7,7 @@ import { useCurrency } from '../context/CurrencyContext.jsx';
 import LiquidGlassButton from '../components/LiquidGlassButton.jsx';
 
 export default function Cart() {
-  const { cart, loadingCart, updateQuantity, removeFromCart, cartTotal } = useCart();
+  const { cart, loadingCart, updateQuantity, removeFromCart, cartTotal, getItemEffectivePrice } = useCart();
   const { user } = useAuth();
   const { formatPrice } = useCurrency();
   const navigate = useNavigate();
@@ -107,6 +107,7 @@ export default function Cart() {
               const isSizeVariant = variantType === 'size';
               const isColorVariant = variantType === 'color';
               const isUpdating = updatingId === itemKey;
+              const effectivePrice = getItemEffectivePrice(item);
 
               return (
                 <div 
@@ -143,7 +144,7 @@ export default function Cart() {
                         )}
                       </div>
                       <p className="text-xs font-bold text-text-secondary">
-                        {formatPrice(item.product?.price || 0)} each
+                        {formatPrice(effectivePrice)} each
                       </p>
                     </div>
                   </div>
@@ -174,7 +175,7 @@ export default function Cart() {
                     {/* Price display and Delete */}
                     <div className="flex items-center gap-4">
                       <span className="text-sm font-extrabold text-brown-dark">
-                        {formatPrice((item.product?.price || 0) * item.quantity)}
+                        {formatPrice(effectivePrice * item.quantity)}
                       </span>
                       <button
                         onClick={() => handleRemove(item.productId, item.variantId)}

@@ -275,6 +275,11 @@ export default function Dashboard() {
                         <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${getStatusBadgeClass(order.status)}`}>
                           {order.status}
                         </span>
+                        {order.refundStatus === 'Approved' && (
+                          <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-teal-50 text-teal-700 dark:bg-teal-950/20 dark:text-teal-400">
+                            Refunded ${parseFloat(order.refundAmount || 0).toFixed(2)}
+                          </span>
+                        )}
                         {isOpen ? <ChevronUp className="h-4.5 w-4.5 text-slate-400" /> : <ChevronDown className="h-4.5 w-4.5 text-slate-400" />}
                       </div>
                     </button>

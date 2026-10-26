@@ -194,7 +194,7 @@ const SYSTEM_INSTRUCTION = `
 You are the luxury AI Fashion Stylist & Shopping Assistant for "TrendVibe", a high-end fashion brand offering curated apparel and footwear for Men, Women, and Kids.
 
 ### Core Guidelines & Rules:
-1. **Source of Truth**: All information about products, prices, stock levels, sizes, categories, shopping cart, and customer orders MUST come strictly from tool/function calls to the MySQL database. NEVER invent or hallucinate product details, prices, stock availability, or fake order numbers.
+1. **Source of Truth**: All information about products, prices, stock levels, sizes, categories, shopping cart, and customer orders MUST come strictly from tool/function calls to the database. NEVER invent or hallucinate product details, prices, stock availability, or fake order numbers.
 2. **Background Page Context & Product Referencing**:
    - The system provides context about the background page the customer is viewing.
    - If the customer refers to "this", "this product", "this item", "this one", "add to cart", "buy this", or asks questions about the product they are viewing without explicitly naming it, ALWAYS assume they are referring to the background viewed product provided in System Context.
@@ -381,7 +381,7 @@ async function executeToolCall(toolCall, userContext, cartActionsCollector) {
           return { error: `Only ${maxStock} items available in stock for ${product.name} (Size: ${selectedOption || 'Standard'}).` };
         }
 
-        // If user is authenticated, persist directly into MySQL database
+        // If user is authenticated, persist directly into database
         if (userContext && userContext.id) {
           await addOrIncrementCartItem(userContext.id, product.id, variantId, selectedOption, qty, maxStock);
         }

@@ -1,0 +1,13 @@
+{
+  "base": "USD",
+  "rates": {
+    "PKR": 276.940193,
+    "USD": 1,
+    "EUR": 0.89213,
+    "GBP": 0.747783,
+    "AED": 3.6725,
+    "SAR": 3.75
+  },
+  "updatedAt": "2026-10-26T08:34:52.031Z",
+  "source": "open.er-api.com"
+}

@@ -26,6 +26,8 @@ export default function ProductDetail() {
   const [actionError, setActionError] = useState('');
   const [recommendations, setRecommendations] = useState([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
+  const [alternatives, setAlternatives] = useState([]);
+  const [alternativesLoading, setAlternativesLoading] = useState(false);
 
   useEffect(() => {
     async function fetchProductDetail() {
@@ -44,11 +46,43 @@ export default function ProductDetail() {
         if ((data.category === 'Men' || data.category === 'Women') && (!data.variants || data.variants.length === 0)) {
           setSelectedSize('Medium');
         }
+
+        // Check if completely out of stock and pre-fetch alternatives
+        const totalStock = data.variants && data.variants.length > 0
+          ? data.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+          : (data.stock || 0);
+        if (totalStock <= 0) {
+          fetchAlternatives(data.category, data.id);
+        }
       } catch (err) {
         console.error(err);
         setError(err.message || 'Error fetching details');
       } finally {
         setLoading(false);
+      }
+    }
+
+    async function fetchAlternatives(category, currentId) {
+      try {
+        setAlternativesLoading(true);
+        const res = await fetch(`${API_URL}/products?category=${encodeURIComponent(category)}`);
+        if (res.ok) {
+          const data = await res.json();
+          // Filter: same category, not current product, must have stock > 0
+          const alts = data
+            .filter(p => p.id !== currentId && (
+              // Has variants with stock
+              (p.variants && p.variants.length > 0 && p.variants.some(v => v.stock > 0)) ||
+              // Or no variants but has stock
+              (!p.variants || p.variants.length === 0) && (p.stock || 0) > 0
+            ))
+            .slice(0, 6);
+          setAlternatives(alts);
+        }
+      } catch (err) {
+        console.error('Error fetching alternatives:', err);
+      } finally {
+        setAlternativesLoading(false);
       }
     }
 
@@ -230,6 +264,54 @@ export default function ProductDetail() {
               <LiquidGlassButton onClick={handleAddToCart} disabled={isOutOfStock || adding} variant={added ? 'success' : 'primary'} className="flex-1 h-11 text-sm font-bold rounded-full">{adding ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : added ? <><Check className="h-4 w-4" /><span>Added to Cart!</span></> : <><ShoppingBag className="h-4 w-4" /><span>Add {quantity} to Cart</span></>}</LiquidGlassButton>
             </div>
             {actionError && <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 0.8rem', background: 'rgba(139,58,58,0.08)', border: '1px solid rgba(139,58,58,0.18)', borderRadius: '12px', color: 'var(--error)', fontFamily: 'var(--font-sans)', fontSize: '0.72rem', fontWeight: 700, marginBottom: '1rem' }}><AlertCircle className="h-4 w-4 shrink-0" />{actionError}</div>}
+
+            {/* Out of Stock — See Alternatives Inline Banner */}
+            {isOutOfStock && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.85rem 1rem',
+                background: 'rgba(111,78,55,0.07)',
+                border: '1px solid rgba(111,78,55,0.18)',
+                borderRadius: '14px',
+                marginBottom: '1rem',
+              }}>
+                <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>😔</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                    This item is sold out
+                  </p>
+                  <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.72rem', color: 'var(--text-secondary)', margin: '0.15rem 0 0' }}>
+                    {alternativesLoading
+                      ? 'Finding alternatives for you…'
+                      : alternatives.length > 0
+                        ? `We found ${alternatives.length} similar item${alternatives.length > 1 ? 's' : ''} you might love`
+                        : 'Check back soon or explore our full catalog'}
+                  </p>
+                </div>
+                {alternatives.length > 0 && (
+                  <a
+                    href="#alternatives"
+                    style={{
+                      flexShrink: 0,
+                      padding: '0.4rem 0.85rem',
+                      background: 'var(--brown-primary)',
+                      color: '#fff',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      borderRadius: '999px',
+                      textDecoration: 'none',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    See Alternatives ↓
+                  </a>
+                )}
+              </div>
+            )}
+
             <div style={{ paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
               <h3 style={{ fontFamily: 'var(--font-sans)', fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.45rem' }}>Product Details</h3>
               <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.82rem', lineHeight: 1.8, color: 'var(--text-secondary)' }}>{product.description}</p>
@@ -241,6 +323,47 @@ export default function ProductDetail() {
             </div>
           </div>
         </motion.div>
+
+        {/* ── Alternatives Section (only when OOS and alternatives exist) ── */}
+        {isOutOfStock && (alternatives.length > 0 || alternativesLoading) && (
+          <div id="alternatives" style={{ marginTop: '4rem', borderTop: '2px solid rgba(111,78,55,0.15)', paddingTop: '3rem' }}>
+            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+              <span style={{
+                display: 'inline-block',
+                background: 'rgba(111,78,55,0.1)',
+                color: 'var(--brown-primary)',
+                fontFamily: 'var(--font-sans)',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                padding: '0.3rem 0.85rem',
+                borderRadius: '999px',
+                marginBottom: '0.75rem',
+              }}>
+                This Item Is Sold Out
+              </span>
+              <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '2rem', color: 'var(--text-primary)', margin: 0 }}>
+                Similar Items You'll Love
+              </h2>
+              <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.88rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                These in-stock alternatives from the same category might be perfect for you
+              </p>
+            </div>
+
+            {alternativesLoading ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem 0' }}>
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-[var(--brown-primary)] border-t-transparent" />
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.5rem' }}>
+                {alternatives.map((alt) => (
+                  <ProductCard key={alt.id} product={alt} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Recommended for You Section */}
         <div style={{ marginTop: '4rem', borderTop: '1px solid var(--border-color)', paddingTop: '3rem' }}>

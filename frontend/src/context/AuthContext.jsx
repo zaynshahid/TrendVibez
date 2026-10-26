@@ -2,8 +2,20 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 
 const AuthContext = createContext(null);
 
-const apiHost = window.location.hostname || 'localhost';
-export const API_URL = import.meta.env.VITE_API_URL || `http://${apiHost}:5000/api`;
+const rawApiUrl = import.meta.env.VITE_API_URL;
+let resolvedApiUrl;
+
+if (rawApiUrl && rawApiUrl.trim()) {
+  resolvedApiUrl = rawApiUrl.trim().replace(/\/+$/, '');
+  if (!resolvedApiUrl.endsWith('/api')) {
+    resolvedApiUrl += '/api';
+  }
+} else {
+  // Use relative '/api' so Vite proxy automatically forwards requests to http://localhost:5000 on both localhost and ngrok
+  resolvedApiUrl = '/api';
+}
+
+export const API_URL = resolvedApiUrl;
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);

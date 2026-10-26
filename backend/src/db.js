@@ -1,55 +1,129 @@
-import mysql from 'mysql2/promise';
+import './env.js';
+import dns from 'dns';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { MongoClient } from 'mongodb';
+
+// Configure public DNS servers to resolve MongoDB SRV records on networks/ISPs that block SRV queries
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {
+  // Ignore in environments where setting DNS servers is restricted
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_DIR = path.join(__dirname, '..', 'data');
 
-let pool = null;
+let cachedClient = null;
+let cachedDb = null;
 
-// Helper to execute queries with automatic pool allocation
-export async function query(sql, params) {
-  if (!pool) {
-    throw new Error('Database pool not initialized. Call initDb first.');
+/**
+ * Returns cached MongoDB database instance for Node.js & Vercel serverless functions.
+ */
+export async function getDb() {
+  if (cachedDb) {
+    return cachedDb;
   }
-  const [results] = await pool.execute(sql, params);
-  return results;
+
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error('MONGODB_URI environment variable is not defined.');
+  }
+
+  if (!cachedClient) {
+    cachedClient = new MongoClient(uri, {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+    });
+    await cachedClient.connect();
+  }
+
+  cachedDb = cachedClient.db('trendvibz');
+  return cachedDb;
 }
 
+/**
+ * Compatibility query function for existing routes (e.g. orders.js, geminiChatService.js)
+ */
+export async function query(sql, params = []) {
+  const db = await getDb();
+  const trimmed = sql.trim().toUpperCase();
+
+  // 1. SELECT email FROM users WHERE role = 'admin'
+  if (trimmed.includes('FROM USERS') && trimmed.includes("ROLE = 'ADMIN'")) {
+    return await db.collection('users')
+      .find({ role: 'admin' }, { projection: { email: 1 } })
+      .toArray();
+  }
+
+  // 2. SELECT ... FROM products WHERE id = ?
+  if (trimmed.includes('FROM PRODUCTS') && trimmed.includes('WHERE ID = ?')) {
+    const id = params[0];
+    return await db.collection('products')
+      .find({ $or: [{ id }, { _id: id }] })
+      .toArray();
+  }
+
+  // 3. SELECT * FROM orders WHERE (id = ? OR orderReference = ?) AND userId = ?
+  if (trimmed.includes('FROM ORDERS') && trimmed.includes('ORDERREFERENCE = ?') && trimmed.includes('USERID = ?')) {
+    const idOrRef = params[0];
+    const userId = params[2];
+    return await db.collection('orders')
+      .find({
+        $or: [{ id: idOrRef }, { orderReference: idOrRef }],
+        userId
+      })
+      .toArray();
+  }
+
+  // 4. SELECT * FROM order_items WHERE orderId = ?
+  if (trimmed.includes('FROM ORDER_ITEMS') && trimmed.includes('ORDERID = ?')) {
+    const orderId = params[0];
+    return await db.collection('order_items')
+      .find({ orderId })
+      .toArray();
+  }
+
+  // 5. SELECT * FROM products
+  if (trimmed.includes('FROM PRODUCTS') && !trimmed.includes('WHERE')) {
+    return await db.collection('products').find({}).toArray();
+  }
+
+  // 6. SELECT name FROM categories
+  if (trimmed.includes('FROM CATEGORIES') && !trimmed.includes('WHERE')) {
+    return await db.collection('categories').find({}, { projection: { name: 1 } }).toArray();
+  }
+
+  throw new Error(`Unsupported SQL query in MongoDB mode: ${sql}`);
+}
+
+/**
+ * Initializes MongoDB connection and verifies collections
+ */
 export async function initDb() {
-  const config = {
-    host: process.env.DB_HOST || '127.0.0.1',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    port: parseInt(process.env.DB_PORT || '3306'),
-  };
-
   try {
-    // 1. Establish connection to MySQL without DB first, to ensure database exists
-    const tempConnection = await mysql.createConnection(config);
-    const dbName = process.env.DB_NAME || 'trendvibe_db';
-    await tempConnection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
-    await tempConnection.end();
+    const db = await getDb();
+    console.log('Connected to MongoDB database: trendvibz');
 
-    // 2. Initialize the connection pool with database selected
-    pool = mysql.createPool({
-      ...config,
-      database: dbName,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0
-    });
+    // Create indexes if they don't already exist
+    try {
+      await db.collection('users').createIndex({ email: 1 }, { unique: true });
+      await db.collection('products').createIndex({ id: 1 }, { unique: true });
+      await db.collection('categories').createIndex({ name: 1 }, { unique: true });
+      await db.collection('orders').createIndex({ id: 1 }, { unique: true });
+      await db.collection('orders').createIndex({ orderReference: 1 }, { unique: true });
+      await db.collection('order_items').createIndex({ orderId: 1 });
+      await db.collection('product_size_inventory').createIndex({ productId: 1, sizeName: 1 });
+      await db.collection('cart_items').createIndex({ userId: 1, productId: 1, variantId: 1 });
+    } catch (idxErr) {
+      // Indexes already exist or created
+    }
 
-    console.log(`Connected to MySQL database: ${dbName}`);
-
-    // 3. Create tables
-    await createTables();
-
-    // 4. Seed tables
+    // Fallback seeders if fresh instance
     await seedSettings();
     await seedAdmin();
     await seedProducts();
@@ -58,219 +132,33 @@ export async function initDb() {
     await seedOrdersAndCarts();
 
   } catch (error) {
-    console.error('Failed to initialize database:', error);
+    console.error('Failed to initialize MongoDB database:', error);
     process.exit(1);
   }
 }
 
-async function createTables() {
-  // Categories table
-  await query(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id VARCHAR(36) PRIMARY KEY,
-      name VARCHAR(100) NOT NULL UNIQUE,
-      image VARCHAR(2083) NOT NULL DEFAULT '',
-      subtitle VARCHAR(255) NOT NULL DEFAULT '',
-      createdAt VARCHAR(50) NOT NULL
-    )
-  `);
-
-  // Migrate existing categories table to add image and subtitle columns
-  try { await query(`ALTER TABLE categories ADD COLUMN image VARCHAR(2083) NOT NULL DEFAULT ''`); } catch (e) {}
-  try { await query(`ALTER TABLE categories ADD COLUMN subtitle VARCHAR(255) NOT NULL DEFAULT ''`); } catch (e) {}
-
-  // Users table
-  await query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id VARCHAR(36) PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      email VARCHAR(255) NOT NULL UNIQUE,
-      password VARCHAR(255),
-      role VARCHAR(50) NOT NULL DEFAULT 'user',
-      createdAt VARCHAR(50) NOT NULL
-    )
-  `);
-
-  // Products table
-  await query(`
-    CREATE TABLE IF NOT EXISTS products (
-      id VARCHAR(36) PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      description TEXT NOT NULL,
-      price DECIMAL(10, 2) NOT NULL,
-      discountPercent DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
-      category VARCHAR(100) NOT NULL,
-      image VARCHAR(2083) NOT NULL,
-      stock INT NOT NULL DEFAULT 0,
-      rating DECIMAL(3, 2) NOT NULL DEFAULT 4.5,
-      variantData TEXT NOT NULL,
-      createdAt VARCHAR(50) NOT NULL
-    )
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS product_size_inventory (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      productId VARCHAR(36) NOT NULL,
-      sizeName VARCHAR(50) NOT NULL,
-      stock INT NOT NULL DEFAULT 0,
-      createdAt VARCHAR(50) NOT NULL,
-      UNIQUE KEY uq_product_size (productId, sizeName),
-      FOREIGN KEY (productId) REFERENCES products(id) ON DELETE CASCADE
-    )
-  `);
-
-  // Ensure any legacy variant table is removed
-  await query('DROP TABLE IF EXISTS product_variants');
-
-  // Migrate existing products table if needed
-  try {
-    await query(`ALTER TABLE products ADD COLUMN variantData TEXT NOT NULL`);
-  } catch (e) {}
-  try {
-    await query(`ALTER TABLE products ADD COLUMN discountPercent DECIMAL(5, 2) NOT NULL DEFAULT 0.00`);
-  } catch (e) {}
-
-  // Cart items table
-  await query(`
-    CREATE TABLE IF NOT EXISTS cart_items (
-      userId VARCHAR(36) NOT NULL,
-      productId VARCHAR(36) NOT NULL,
-      variantId VARCHAR(36) NOT NULL DEFAULT '',
-      selectedColor VARCHAR(100) NOT NULL DEFAULT '',
-      quantity INT NOT NULL,
-      PRIMARY KEY (userId, productId, variantId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (productId) REFERENCES products(id) ON DELETE CASCADE
-    )
-  `);
-
-  // Migrations for cart_items if table already existed
-  try {
-    await query(`ALTER TABLE cart_items ADD COLUMN variantId VARCHAR(36) NOT NULL DEFAULT '' AFTER productId`);
-  } catch (e) {}
-  try {
-    await query(`ALTER TABLE cart_items ADD COLUMN selectedColor VARCHAR(100) NOT NULL DEFAULT '' AFTER variantId`);
-  } catch (e) {}
-  try {
-    await query(`ALTER TABLE cart_items DROP PRIMARY KEY, ADD PRIMARY KEY (userId, productId, variantId)`);
-  } catch (e) {}
-
-  // Orders table
-  await query(`
-    CREATE TABLE IF NOT EXISTS orders (
-      id VARCHAR(36) PRIMARY KEY,
-      orderReference VARCHAR(50) NOT NULL UNIQUE,
-      userId VARCHAR(36) NOT NULL,
-      totalAmount DECIMAL(10, 2) NOT NULL,
-      currencyCode CHAR(3) NOT NULL DEFAULT 'USD',
-      currencyRate DECIMAL(14, 8) NOT NULL DEFAULT 1,
-      status VARCHAR(50) NOT NULL DEFAULT 'Pending',
-      name VARCHAR(255) NOT NULL,
-      email VARCHAR(255) NOT NULL,
-      address TEXT NOT NULL,
-      paymentStatus VARCHAR(50) NOT NULL DEFAULT 'Paid',
-      paymentMethod VARCHAR(50) NOT NULL DEFAULT 'Mock Card',
-      createdAt VARCHAR(50) NOT NULL,
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-
-  try { await query(`ALTER TABLE orders ADD COLUMN currencyCode CHAR(3) NOT NULL DEFAULT 'USD' AFTER totalAmount`); } catch (e) {}
-  try { await query(`ALTER TABLE orders ADD COLUMN currencyRate DECIMAL(14, 8) NOT NULL DEFAULT 1 AFTER currencyCode`); } catch (e) {}
-
-  // Order items table
-  await query(`
-    CREATE TABLE IF NOT EXISTS order_items (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      orderId VARCHAR(36) NOT NULL,
-      productId VARCHAR(36),
-      name VARCHAR(255) NOT NULL,
-      price DECIMAL(10, 2) NOT NULL,
-      quantity INT NOT NULL,
-      image VARCHAR(2083) NOT NULL,
-      selectedColor VARCHAR(100) NOT NULL DEFAULT '',
-      FOREIGN KEY (orderId) REFERENCES orders(id) ON DELETE CASCADE,
-      FOREIGN KEY (productId) REFERENCES products(id) ON DELETE SET NULL
-    )
-  `);
-
-  try {
-    await query(`ALTER TABLE order_items ADD COLUMN selectedColor VARCHAR(100) NOT NULL DEFAULT '' AFTER image`);
-  } catch (e) {}
-
-  // Email logs table
-  await query(`
-    CREATE TABLE IF NOT EXISTS email_logs (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      recipient VARCHAR(255) NOT NULL,
-      subject VARCHAR(255) NOT NULL,
-      status VARCHAR(50) NOT NULL,
-      sentAt VARCHAR(50) NOT NULL,
-      errorMessage TEXT
-    )
-  `);
-
-  // Password resets table
-  await query(`
-    CREATE TABLE IF NOT EXISTS password_resets (
-      email VARCHAR(255) PRIMARY KEY,
-      token VARCHAR(255) NOT NULL,
-      expiresAt VARCHAR(50) NOT NULL
-    )
-  `);
-
-  // Activity / Audit logs table
-  await query(`
-    CREATE TABLE IF NOT EXISTS activity_logs (
-      id        INT AUTO_INCREMENT PRIMARY KEY,
-      adminId   VARCHAR(36) NOT NULL,
-      adminName VARCHAR(255) NOT NULL,
-      action    VARCHAR(100) NOT NULL,
-      module    VARCHAR(100) NOT NULL,
-      recordId  VARCHAR(255),
-      oldData   TEXT,
-      newData   TEXT,
-      ipAddress VARCHAR(64),
-      createdAt VARCHAR(50) NOT NULL
-    )
-  `);
-
-  // Site settings table
-  await query(`
-    CREATE TABLE IF NOT EXISTS site_settings (
-      setting_key VARCHAR(100) PRIMARY KEY,
-      setting_value TEXT,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Support queries table
-  await query(`
-    CREATE TABLE IF NOT EXISTS support_queries (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      email VARCHAR(255) NOT NULL,
-      category VARCHAR(100) NOT NULL,
-      message TEXT NOT NULL,
-      status VARCHAR(50) DEFAULT 'Pending',
-      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-}
-
 export async function seedSettings() {
   try {
-    await query(`INSERT IGNORE INTO site_settings (setting_key, setting_value) VALUES ('notification_enabled', 'true')`);
-    await query(`INSERT IGNORE INTO site_settings (setting_key, setting_value) VALUES ('notification_product_id', '')`);
+    const db = await getDb();
+    await db.collection('site_settings').updateOne(
+      { setting_key: 'notification_enabled' },
+      { $setOnInsert: { _id: 'notification_enabled', setting_key: 'notification_enabled', setting_value: 'true', updated_at: new Date() } },
+      { upsert: true }
+    );
+    await db.collection('site_settings').updateOne(
+      { setting_key: 'notification_product_id' },
+      { $setOnInsert: { _id: 'notification_product_id', setting_key: 'notification_product_id', setting_value: '', updated_at: new Date() } },
+      { upsert: true }
+    );
   } catch (e) {
     console.error('Error seeding site settings:', e);
   }
 }
 
 async function seedAdmin() {
-  const usersCount = await query('SELECT COUNT(*) as count FROM users');
-  if (usersCount[0].count > 0) return;
+  const db = await getDb();
+  const count = await db.collection('users').countDocuments();
+  if (count > 0) return;
 
   const usersJsonPath = path.join(DATA_DIR, 'users.json');
   let users = [];
@@ -282,7 +170,6 @@ async function seedAdmin() {
     }
   }
 
-  // If we couldn't load users from users.json, seed defaults
   if (users.length === 0) {
     const salt1 = bcrypt.genSaltSync(10);
     const salt2 = bcrypt.genSaltSync(10);
@@ -307,81 +194,109 @@ async function seedAdmin() {
   }
 
   for (const user of users) {
-    await query(
-      'INSERT INTO users (id, name, email, password, role, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-      [user.id, user.name, user.email, user.password, user.role, user.createdAt]
+    await db.collection('users').updateOne(
+      { email: user.email.toLowerCase() },
+      {
+        $setOnInsert: {
+          _id: user.id || uuidv4(),
+          id: user.id || uuidv4(),
+          name: user.name,
+          email: user.email.toLowerCase(),
+          password: user.password,
+          role: user.role,
+          createdAt: user.createdAt || new Date().toISOString()
+        }
+      },
+      { upsert: true }
     );
   }
-  console.log('Seeded users table.');
+  console.log('Seeded users collection.');
 }
 
 async function seedProducts() {
-  const productsCount = await query('SELECT COUNT(*) as count FROM products');
-  if (productsCount[0].count === 0) {
-    const productsJsonPath = path.join(DATA_DIR, 'products.json');
-    let products = [];
-    if (fs.existsSync(productsJsonPath)) {
-      try {
-        products = JSON.parse(fs.readFileSync(productsJsonPath, 'utf-8'));
-      } catch (e) {
-        console.error('Error parsing products.json:', e);
-      }
-    }
+  const db = await getDb();
+  const count = await db.collection('products').countDocuments();
+  if (count > 0) return;
 
-    for (const product of products) {
-      await query(
-        'INSERT INTO products (id, name, description, price, category, image, stock, rating, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          product.id,
-          product.name,
-          product.description,
-          parseFloat(product.price),
-          product.category,
-          product.image,
-          parseInt(product.stock),
-          parseFloat(product.rating || 4.5),
-          product.createdAt || new Date().toISOString()
-        ]
-      );
+  const productsJsonPath = path.join(DATA_DIR, 'products.json');
+  let products = [];
+  if (fs.existsSync(productsJsonPath)) {
+    try {
+      products = JSON.parse(fs.readFileSync(productsJsonPath, 'utf-8'));
+    } catch (e) {
+      console.error('Error parsing products.json:', e);
     }
-    console.log('Seeded products table.');
   }
+
+  for (const product of products) {
+    const prodId = product.id || uuidv4();
+    await db.collection('products').updateOne(
+      { id: prodId },
+      {
+        $setOnInsert: {
+          _id: prodId,
+          id: prodId,
+          name: product.name,
+          description: product.description,
+          price: parseFloat(product.price),
+          discountPercent: parseFloat(product.discountPercent || 0),
+          category: product.category,
+          subcategory: product.subcategory || '',
+          brand: product.brand || '',
+          gender: product.gender || '',
+          image: product.image,
+          stock: parseInt(product.stock),
+          rating: parseFloat(product.rating || 4.5),
+          variantData: typeof product.variants === 'string' ? product.variants : JSON.stringify(product.variants || []),
+          createdAt: product.createdAt || new Date().toISOString()
+        }
+      },
+      { upsert: true }
+    );
+  }
+  console.log('Seeded products collection.');
 }
 
 async function seedCategories() {
-  const countRes = await query('SELECT COUNT(*) as count FROM categories');
-  if (countRes[0].count > 0) return;
+  const db = await getDb();
+  const count = await db.collection('categories').countDocuments();
+  if (count > 0) return;
 
   const defaultCategories = [
-    { name: 'Men',     image: 'https://images.unsplash.com/photo-1617137968427-85924c800a22?w=700&auto=format&fit=crop&q=80', subtitle: 'Tailoring & Denim' },
-    { name: 'Women',   image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=700&auto=format&fit=crop&q=80', subtitle: 'Dresses & Trousers' },
-    { name: 'Kids',    image: 'https://images.unsplash.com/photo-1503919545889-aef636e10ad4?w=700&auto=format&fit=crop&q=80', subtitle: 'Fleece & Dungarees' },
-    { name: 'Footwear',image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=700&auto=format&fit=crop&q=80', subtitle: 'Sneakers & Loafers' },
+    { name: 'Men', image: 'https://images.unsplash.com/photo-1617137968427-85924c800a22?w=700&auto=format&fit=crop&q=80', subtitle: 'Tailoring & Denim' },
+    { name: 'Women', image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=700&auto=format&fit=crop&q=80', subtitle: 'Dresses & Trousers' },
+    { name: 'Kids', image: 'https://images.unsplash.com/photo-1503919545889-aef636e10ad4?w=700&auto=format&fit=crop&q=80', subtitle: 'Fleece & Dungarees' },
+    { name: 'Footwear', image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=700&auto=format&fit=crop&q=80', subtitle: 'Sneakers & Loafers' },
   ];
 
-  // Also pull in any extra categories already in products table
-  const prodCats = await query('SELECT DISTINCT category FROM products');
-  const catMap = new Map(defaultCategories.map(c => [c.name.toLowerCase(), c]));
-  prodCats.forEach(row => {
-    const key = (row.category || '').trim().toLowerCase();
-    if (key && !catMap.has(key)) {
-      catMap.set(key, { name: row.category.trim(), image: '', subtitle: '' });
-    }
-  });
-
   const now = new Date().toISOString();
-  for (const cat of catMap.values()) {
-    await query(
-      'INSERT IGNORE INTO categories (id, name, image, subtitle, createdAt) VALUES (?, ?, ?, ?, ?)',
-      [uuidv4(), cat.name, cat.image, cat.subtitle, now]
+  for (const cat of defaultCategories) {
+    const catId = uuidv4();
+    await db.collection('categories').updateOne(
+      { name: cat.name },
+      {
+        $setOnInsert: {
+          _id: catId,
+          id: catId,
+          name: cat.name,
+          image: cat.image,
+          subtitle: cat.subtitle,
+          createdAt: now
+        }
+      },
+      { upsert: true }
     );
   }
-  console.log('Seeded categories table.');
+  console.log('Seeded categories collection.');
 }
 
 async function seedProductSizeInventory() {
-  const rows = await query('SELECT id, variantData FROM products');
-  for (const product of rows) {
+  const db = await getDb();
+  const count = await db.collection('product_size_inventory').countDocuments();
+  if (count > 0) return;
+
+  const products = await db.collection('products').find({}).toArray();
+  for (const product of products) {
     const variants = (() => {
       try {
         const parsed = JSON.parse(product.variantData || '[]');
@@ -391,149 +306,151 @@ async function seedProductSizeInventory() {
       }
     })();
     await syncProductSizeInventory(product.id, variants);
-    const sizeRows = await query('SELECT stock FROM product_size_inventory WHERE productId = ?', [product.id]);
-    if (sizeRows.length > 0) {
-      const totalSizeStock = sizeRows.reduce((sum, row) => sum + parseInt(row.stock || 0), 0);
-      await query('UPDATE products SET stock = ? WHERE id = ?', [totalSizeStock, product.id]);
-    }
   }
 }
 
 async function seedOrdersAndCarts() {
-  // Seed carts
-  const cartItemsCount = await query('SELECT COUNT(*) as count FROM cart_items');
-  if (cartItemsCount[0].count === 0) {
-    const cartsJsonPath = path.join(DATA_DIR, 'carts.json');
-    if (fs.existsSync(cartsJsonPath)) {
-      try {
-        const carts = JSON.parse(fs.readFileSync(cartsJsonPath, 'utf-8'));
-        for (const [userId, items] of Object.entries(carts)) {
-          const userExists = await query('SELECT 1 FROM users WHERE id = ?', [userId]);
-          if (userExists.length === 0) continue;
+  const db = await getDb();
+  const count = await db.collection('orders').countDocuments();
+  if (count > 0) return;
 
-          for (const item of items) {
-            const prodExists = await query('SELECT 1 FROM products WHERE id = ?', [item.productId]);
-            if (prodExists.length === 0) continue;
+  const ordersJsonPath = path.join(DATA_DIR, 'orders.json');
+  if (fs.existsSync(ordersJsonPath)) {
+    try {
+      const orders = JSON.parse(fs.readFileSync(ordersJsonPath, 'utf-8'));
+      for (const order of orders) {
+        await db.collection('orders').updateOne(
+          { id: order.id },
+          {
+            $setOnInsert: {
+              _id: order.id,
+              id: order.id,
+              orderReference: order.orderReference,
+              userId: order.userId,
+              totalAmount: parseFloat(order.totalAmount),
+              currencyCode: 'USD',
+              currencyRate: 1,
+              status: order.status,
+              name: order.name,
+              email: order.email,
+              address: order.address,
+              paymentStatus: order.paymentStatus || 'Paid',
+              paymentMethod: order.paymentMethod || 'Mock Card',
+              platform: 'Direct',
+              refundStatus: 'None',
+              refundAmount: 0,
+              createdAt: order.createdAt
+            }
+          },
+          { upsert: true }
+        );
 
-            await query(
-              'INSERT INTO cart_items (userId, productId, quantity) VALUES (?, ?, ?)',
-              [userId, item.productId, parseInt(item.quantity)]
-            );
-          }
-        }
-        console.log('Seeded cart_items table.');
-      } catch (e) {
-        console.error('Error seeding carts:', e);
-      }
-    }
-  }
-
-  // Seed orders and order_items
-  const ordersCount = await query('SELECT COUNT(*) as count FROM orders');
-  if (ordersCount[0].count === 0) {
-    const ordersJsonPath = path.join(DATA_DIR, 'orders.json');
-    if (fs.existsSync(ordersJsonPath)) {
-      try {
-        const orders = JSON.parse(fs.readFileSync(ordersJsonPath, 'utf-8'));
-        for (const order of orders) {
-          const userExists = await query('SELECT 1 FROM users WHERE id = ?', [order.userId]);
-          if (userExists.length === 0) continue;
-
-          await query(
-            'INSERT INTO orders (id, orderReference, userId, totalAmount, status, name, email, address, paymentStatus, paymentMethod, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [
-              order.id,
-              order.orderReference,
-              order.userId,
-              parseFloat(order.totalAmount),
-              order.status,
-              order.name,
-              order.email,
-              order.address,
-              order.paymentStatus || 'Paid',
-              order.paymentMethod || 'Mock Card',
-              order.createdAt
-            ]
-          );
-
+        if (Array.isArray(order.items)) {
           for (const item of order.items) {
-            const prodExists = await query('SELECT 1 FROM products WHERE id = ?', [item.productId]);
-            const productId = prodExists.length > 0 ? item.productId : null;
-
-            await query(
-              'INSERT INTO order_items (orderId, productId, name, price, quantity, image) VALUES (?, ?, ?, ?, ?, ?)',
-              [
-                order.id,
-                productId,
-                item.name,
-                parseFloat(item.price),
-                parseInt(item.quantity),
-                item.image
-              ]
-            );
+            await db.collection('order_items').insertOne({
+              id: uuidv4(),
+              orderId: order.id,
+              productId: item.productId,
+              name: item.name,
+              price: parseFloat(item.price),
+              quantity: parseInt(item.quantity),
+              image: item.image,
+              selectedColor: item.selectedColor || ''
+            });
           }
         }
-        console.log('Seeded orders and order_items tables.');
-      } catch (e) {
-        console.error('Error seeding orders:', e);
       }
+      console.log('Seeded orders collection.');
+    } catch (e) {
+      console.error('Error seeding orders:', e);
     }
   }
 }
 
+// ==========================================
 // User methods
+// ==========================================
+
 export async function findUserByEmail(email) {
-  const rows = await query('SELECT * FROM users WHERE email = ?', [email.toLowerCase()]);
-  return rows[0] || null;
+  if (!email) return null;
+  const db = await getDb();
+  return await db.collection('users').findOne({ email: email.toLowerCase() });
 }
 
 export async function findUserById(id) {
-  const rows = await query('SELECT * FROM users WHERE id = ?', [id]);
-  return rows[0] || null;
+  if (!id) return null;
+  const db = await getDb();
+  return await db.collection('users').findOne({ $or: [{ id }, { _id: id }] });
 }
 
 export async function createUser({ id, name, email, password, role, createdAt }) {
-  await query(
-    'INSERT INTO users (id, name, email, password, role, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-    [id, name, email.toLowerCase(), password, role || 'user', createdAt || new Date().toISOString()]
-  );
-  return { id, name, email, role, createdAt };
+  const db = await getDb();
+  const userId = id || uuidv4();
+  const created = createdAt || new Date().toISOString();
+  const user = {
+    _id: userId,
+    id: userId,
+    name,
+    email: email.toLowerCase(),
+    password,
+    role: role || 'user',
+    createdAt: created
+  };
+  await db.collection('users').insertOne(user);
+  return { id: userId, name, email: email.toLowerCase(), role: user.role, createdAt: created };
 }
 
 export async function updateUser(id, updates) {
-  const setClause = [];
-  const values = [];
-  Object.entries(updates).forEach(([key, value]) => {
-    setClause.push(`\`${key}\` = ?`);
-    values.push(value);
-  });
-  values.push(id);
-  await query(`UPDATE users SET ${setClause.join(', ')} WHERE id = ?`, values);
+  const db = await getDb();
+  const sanitized = { ...updates };
+  delete sanitized._id;
+  delete sanitized.id;
+
+  if (sanitized.email) {
+    sanitized.email = sanitized.email.toLowerCase();
+  }
+
+  await db.collection('users').updateOne(
+    { $or: [{ id }, { _id: id }] },
+    { $set: sanitized }
+  );
   return findUserById(id);
 }
 
 export async function getAllUsers() {
-  return query('SELECT id, name, email, role, createdAt FROM users');
+  const db = await getDb();
+  return await db.collection('users')
+    .find({}, { projection: { id: 1, name: 1, email: 1, role: 1, createdAt: 1 } })
+    .toArray();
 }
 
 export async function deleteUser(id) {
-  await query('DELETE FROM users WHERE id = ?', [id]);
+  const db = await getDb();
+  await db.collection('users').deleteOne({ $or: [{ id }, { _id: id }] });
 }
 
-// Product methods
+// ==========================================
+// Product Size Inventory methods
+// ==========================================
+
 export async function getProductSizeInventory(productId) {
-  const rows = await query(
-    'SELECT id, productId, sizeName, stock, createdAt FROM product_size_inventory WHERE productId = ? ORDER BY sizeName ASC',
-    [productId]
-  );
+  const db = await getDb();
+  const rows = await db.collection('product_size_inventory')
+    .find({ productId })
+    .sort({ sizeName: 1 })
+    .toArray();
   return rows.map(row => ({
-    ...row,
-    stock: parseInt(row.stock)
+    id: row.id,
+    productId: row.productId,
+    sizeName: row.sizeName,
+    stock: parseInt(row.stock || 0),
+    createdAt: row.createdAt
   }));
 }
 
 async function syncProductSizeInventory(productId, variants = []) {
-  await query('DELETE FROM product_size_inventory WHERE productId = ?', [productId]);
+  const db = await getDb();
+  await db.collection('product_size_inventory').deleteMany({ productId });
 
   const sizeVariants = (Array.isArray(variants) ? variants : [])
     .filter(variant => (variant?.variantType || 'color') === 'size' && (variant?.color || '').toString().trim() !== '')
@@ -544,12 +461,15 @@ async function syncProductSizeInventory(productId, variants = []) {
 
   if (sizeVariants.length === 0) return;
 
-  for (const variant of sizeVariants) {
-    await query(
-      'INSERT INTO product_size_inventory (productId, sizeName, stock, createdAt) VALUES (?, ?, ?, ?)',
-      [productId, variant.sizeName, variant.stock, new Date().toISOString()]
-    );
-  }
+  const docs = sizeVariants.map(variant => ({
+    id: uuidv4(),
+    productId,
+    sizeName: variant.sizeName,
+    stock: variant.stock,
+    createdAt: new Date().toISOString()
+  }));
+
+  await db.collection('product_size_inventory').insertMany(docs);
 }
 
 function sortSizeNames(sizeNames) {
@@ -574,91 +494,111 @@ function sortSizeNames(sizeNames) {
 }
 
 export async function getProductSizeOptions({ category } = {}) {
-  let sql = `
-    SELECT DISTINCT psi.sizeName
-    FROM product_size_inventory psi
-    INNER JOIN products p ON p.id = psi.productId
-    WHERE psi.sizeName <> ''
-  `;
-  const params = [];
-
+  const db = await getDb();
+  let productIds = null;
   if (category) {
-    sql += ' AND LOWER(p.category) = LOWER(?)';
-    params.push(category);
+    const products = await db.collection('products')
+      .find({ category: { $regex: new RegExp(`^${category}$`, 'i') } }, { projection: { id: 1 } })
+      .toArray();
+    productIds = products.map(p => p.id);
   }
 
-  const rows = await query(sql, params);
-  return sortSizeNames(rows.map(row => row.sizeName));
+  const queryObj = { sizeName: { $ne: '' } };
+  if (productIds) {
+    queryObj.productId = { $in: productIds };
+  }
+
+  const sizes = await db.collection('product_size_inventory').distinct('sizeName', queryObj);
+  return sortSizeNames(sizes.filter(Boolean));
 }
 
-export async function getAllProducts({ category, q, sort, minPrice, maxPrice, minRating, inStock, size, discounted } = {}) {
-  let sql = 'SELECT * FROM products WHERE 1=1';
-  const params = [];
+// ==========================================
+// Product Catalog methods
+// ==========================================
+
+export async function getAllProducts({ category, subcategory, q, sort, minPrice, maxPrice, minRating, inStock, size, discounted } = {}) {
+  const db = await getDb();
+  const filter = {};
 
   if (category) {
-    sql += ' AND LOWER(category) = LOWER(?)';
-    params.push(category);
+    filter.category = { $regex: new RegExp(`^${category}$`, 'i') };
+  }
+
+  if (subcategory && subcategory !== 'All') {
+    filter.subcategory = { $regex: new RegExp(`^${subcategory}$`, 'i') };
   }
 
   if (discounted === 'true' || discounted === true) {
-    sql += ' AND discountPercent > 0';
+    filter.discountPercent = { $gt: 0 };
   }
 
   if (q) {
-    sql += ' AND (LOWER(name) LIKE ? OR LOWER(description) LIKE ?)';
-    const searchVal = `%${q.toLowerCase()}%`;
-    params.push(searchVal, searchVal);
+    const regex = new RegExp(q.trim(), 'i');
+    filter.$or = [{ name: regex }, { description: regex }];
   }
 
   if (minPrice !== undefined && minPrice !== '') {
-    sql += ' AND price >= ?';
-    params.push(parseFloat(minPrice));
+    filter.price = { ...(filter.price || {}), $gte: parseFloat(minPrice) };
   }
 
   if (maxPrice !== undefined && maxPrice !== '') {
-    sql += ' AND price <= ?';
-    params.push(parseFloat(maxPrice));
+    filter.price = { ...(filter.price || {}), $lte: parseFloat(maxPrice) };
   }
 
   if (minRating !== undefined && minRating !== '') {
-    sql += ' AND rating >= ?';
-    params.push(parseFloat(minRating));
+    filter.rating = { $gte: parseFloat(minRating) };
   }
 
   if (inStock === 'true' || inStock === true) {
-    sql += ' AND stock > 0';
+    filter.stock = { $gt: 0 };
   }
 
   if (size !== undefined && size !== '') {
-    sql += ` AND EXISTS (
-      SELECT 1
-      FROM product_size_inventory psi
-      WHERE psi.productId = products.id
-        AND LOWER(psi.sizeName) = LOWER(?)
-        ${inStock === 'true' || inStock === true ? 'AND psi.stock > 0' : ''}
-    )`;
-    params.push(size);
-  }
-
-  if (sort) {
-    if (sort === 'price_asc') {
-      sql += ' ORDER BY price ASC';
-    } else if (sort === 'price_desc') {
-      sql += ' ORDER BY price DESC';
-    } else if (sort === 'rating') {
-      sql += ' ORDER BY rating DESC';
-    } else if (sort === 'newest') {
-      sql += ' ORDER BY createdAt DESC';
+    const sizeQuery = {
+      sizeName: { $regex: new RegExp(`^${size.trim()}$`, 'i') }
+    };
+    if (inStock === 'true' || inStock === true) {
+      sizeQuery.stock = { $gt: 0 };
     }
-  } else {
-    sql += ' ORDER BY createdAt DESC';
+    const matchingSizes = await db.collection('product_size_inventory').find(sizeQuery, { projection: { productId: 1 } }).toArray();
+    const allowedIds = matchingSizes.map(s => s.productId);
+    filter.id = { $in: allowedIds };
   }
 
-  const rows = await query(sql, params);
+  let sortObj = { createdAt: -1 };
+  if (sort === 'price_asc') {
+    sortObj = { price: 1 };
+  } else if (sort === 'price_desc') {
+    sortObj = { price: -1 };
+  } else if (sort === 'rating') {
+    sortObj = { rating: -1 };
+  } else if (sort === 'newest') {
+    sortObj = { createdAt: -1 };
+  }
+
+  const rows = await db.collection('products').find(filter).sort(sortObj).toArray();
+
+  const productIds = rows.map(r => r.id);
+  const allSizes = await db.collection('product_size_inventory')
+    .find({ productId: { $in: productIds } })
+    .sort({ sizeName: 1 })
+    .toArray();
+
+  const sizesByProduct = {};
+  for (const s of allSizes) {
+    if (!sizesByProduct[s.productId]) sizesByProduct[s.productId] = [];
+    sizesByProduct[s.productId].push({
+      id: s.id,
+      productId: s.productId,
+      sizeName: s.sizeName,
+      stock: parseInt(s.stock || 0),
+      createdAt: s.createdAt
+    });
+  }
 
   const products = [];
   for (const r of rows) {
-    const sizeInventory = await getProductSizeInventory(r.id);
+    const sizeInventory = sizesByProduct[r.id] || [];
     const price = parseFloat(r.price);
     const discountPercent = parseFloat(r.discountPercent || 0);
     const discountedPrice = discountPercent > 0 ? parseFloat((price * (1 - discountPercent / 100)).toFixed(2)) : price;
@@ -668,8 +608,8 @@ export async function getAllProducts({ category, q, sort, minPrice, maxPrice, mi
       price,
       discountPercent,
       discountedPrice,
-      rating: parseFloat(r.rating),
-      stock: parseInt(r.stock),
+      rating: parseFloat(r.rating || 4.5),
+      stock: parseInt(r.stock || 0),
       variants: (() => {
         try {
           const parsed = JSON.parse(r.variantData || '[]');
@@ -686,23 +626,26 @@ export async function getAllProducts({ category, q, sort, minPrice, maxPrice, mi
 }
 
 export async function getProductById(id) {
-  const rows = await query('SELECT * FROM products WHERE id = ?', [id]);
-  if (!rows[0]) return null;
-  const sizeInventory = await getProductSizeInventory(rows[0].id);
-  const price = parseFloat(rows[0].price);
-  const discountPercent = parseFloat(rows[0].discountPercent || 0);
+  if (!id) return null;
+  const db = await getDb();
+  const row = await db.collection('products').findOne({ $or: [{ id }, { _id: id }] });
+  if (!row) return null;
+
+  const sizeInventory = await getProductSizeInventory(row.id);
+  const price = parseFloat(row.price);
+  const discountPercent = parseFloat(row.discountPercent || 0);
   const discountedPrice = discountPercent > 0 ? parseFloat((price * (1 - discountPercent / 100)).toFixed(2)) : price;
 
   return {
-    ...rows[0],
+    ...row,
     price,
     discountPercent,
     discountedPrice,
-    rating: parseFloat(rows[0].rating),
-    stock: parseInt(rows[0].stock),
+    rating: parseFloat(row.rating || 4.5),
+    stock: parseInt(row.stock || 0),
     variants: (() => {
       try {
-        const parsed = JSON.parse(rows[0].variantData || '[]');
+        const parsed = JSON.parse(row.variantData || '[]');
         return Array.isArray(parsed) ? parsed : [];
       } catch {
         return [];
@@ -712,37 +655,61 @@ export async function getProductById(id) {
   };
 }
 
-export async function createProduct({ id, name, description, price, discountPercent = 0, category, image, stock, rating, createdAt, variants, variantData }) {
+export async function createProduct({ id, name, description, price, discountPercent = 0, category, subcategory = '', brand = '', gender = '', image, stock, rating, createdAt, variants, variantData }) {
+  const db = await getDb();
   const prodId = id || uuidv4();
   const created = createdAt || new Date().toISOString();
   const rat = rating !== undefined ? parseFloat(rating) : 4.5;
   const disc = parseFloat(discountPercent || 0);
   const data = variantData !== undefined ? variantData : variants;
-  await query(
-    'INSERT INTO products (id, name, description, price, discountPercent, category, image, stock, rating, variantData, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [prodId, name, description, price, disc, category, image, stock, rat, JSON.stringify(Array.isArray(data) ? data : []), created]
-  );
+  const variantDataStr = JSON.stringify(Array.isArray(data) ? data : []);
+
+  const newProduct = {
+    _id: prodId,
+    id: prodId,
+    name,
+    description,
+    price: parseFloat(price),
+    discountPercent: disc,
+    category,
+    subcategory: subcategory || '',
+    brand: brand || '',
+    gender: gender || '',
+    image,
+    stock: parseInt(stock || 0),
+    rating: rat,
+    variantData: variantDataStr,
+    createdAt: created
+  };
+
+  await db.collection('products').insertOne(newProduct);
   await syncProductSizeInventory(prodId, Array.isArray(data) ? data : []);
   return getProductById(prodId);
 }
 
 export async function updateProduct(id, updates) {
+  const db = await getDb();
   const { variants, variantData, ...productUpdates } = updates;
-  if (Object.keys(productUpdates).length > 0) {
-    const setClause = [];
-    const values = [];
-    Object.entries(productUpdates).forEach(([key, value]) => {
-      setClause.push(`\`${key}\` = ?`);
-      values.push(value);
-    });
-    values.push(id);
-    await query(`UPDATE products SET ${setClause.join(', ')} WHERE id = ?`, values);
-  }
+
+  if (productUpdates.price !== undefined) productUpdates.price = parseFloat(productUpdates.price);
+  if (productUpdates.stock !== undefined) productUpdates.stock = parseInt(productUpdates.stock);
+  if (productUpdates.rating !== undefined) productUpdates.rating = parseFloat(productUpdates.rating);
+  if (productUpdates.discountPercent !== undefined) productUpdates.discountPercent = parseFloat(productUpdates.discountPercent);
+
+  delete productUpdates._id;
+  delete productUpdates.id;
 
   if (variants !== undefined || variantData !== undefined) {
     const data = variantData !== undefined ? variantData : variants;
-    await query('UPDATE products SET variantData = ? WHERE id = ?', [JSON.stringify(Array.isArray(data) ? data : []), id]);
+    productUpdates.variantData = JSON.stringify(Array.isArray(data) ? data : []);
     await syncProductSizeInventory(id, Array.isArray(data) ? data : []);
+  }
+
+  if (Object.keys(productUpdates).length > 0) {
+    await db.collection('products').updateOne(
+      { $or: [{ id }, { _id: id }] },
+      { $set: productUpdates }
+    );
   }
 
   return getProductById(id);
@@ -750,45 +717,44 @@ export async function updateProduct(id, updates) {
 
 export async function bulkUpdateProductDiscounts(productIds, discountPercent) {
   if (!Array.isArray(productIds) || productIds.length === 0) return [];
+  const db = await getDb();
   const percent = Math.max(0, Math.min(100, parseFloat(discountPercent) || 0));
-  const placeholders = productIds.map(() => '?').join(', ');
-  await query(`UPDATE products SET discountPercent = ? WHERE id IN (${placeholders})`, [percent, ...productIds]);
-  return query(`SELECT * FROM products WHERE id IN (${placeholders})`, productIds);
+
+  await db.collection('products').updateMany(
+    { id: { $in: productIds } },
+    { $set: { discountPercent: percent } }
+  );
+
+  return await db.collection('products').find({ id: { $in: productIds } }).toArray();
 }
 
 export async function deleteProduct(id) {
-  await query('DELETE FROM products WHERE id = ?', [id]);
+  const db = await getDb();
+  await db.collection('products').deleteOne({ $or: [{ id }, { _id: id }] });
+  await db.collection('product_size_inventory').deleteMany({ productId: id });
 }
 
+// ==========================================
 // Cart methods
+// ==========================================
+
 export async function getCartByUserId(userId) {
-  const sql = `
-    SELECT ci.productId, ci.variantId, ci.selectedColor, ci.quantity, 
-           p.name, p.price, p.discountPercent, p.image, p.stock, p.description, p.variantData
-    FROM cart_items ci
-    LEFT JOIN products p ON ci.productId = p.id
-    WHERE ci.userId = ?
-  `;
-  const rows = await query(sql, [userId]);
+  const db = await getDb();
+  const cartRows = await db.collection('cart_items').find({ userId }).toArray();
   const cart = [];
-  for (const row of rows) {
-    const variants = (() => {
-      try {
-        const parsed = JSON.parse(row.variantData || '[]');
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    })();
+
+  for (const row of cartRows) {
+    const product = await getProductById(row.productId);
+    const variants = product?.variants || [];
     const variant = variants.find(v => v.id === row.variantId) || null;
     const inferredVariantType = (() => {
       if (variant) return variant.variantType || 'color';
       const sizeLabels = ['XS', 'S', 'M', 'L', 'XL', 'Small', 'Medium', 'Large'];
       return sizeLabels.includes(row.selectedColor) ? 'size' : 'color';
     })();
-    const price = row.price ? parseFloat(row.price) : 0;
-    const discountPercent = row.discountPercent ? parseFloat(row.discountPercent) : 0;
-    const discountedPrice = discountPercent > 0 ? parseFloat((price * (1 - discountPercent / 100)).toFixed(2)) : price;
+    const price = product?.price || 0;
+    const discountPercent = product?.discountPercent || 0;
+    const discountedPrice = product?.discountedPrice || price;
 
     cart.push({
       productId: row.productId,
@@ -804,13 +770,13 @@ export async function getCartByUserId(userId) {
       },
       product: {
         id: row.productId,
-        name: row.name || 'Product Unavailable',
+        name: product?.name || 'Product Unavailable',
         price,
         discountPercent,
         discountedPrice,
-        image: row.image || '',
-        stock: row.stock !== null ? parseInt(row.stock) : 0,
-        description: row.description || ''
+        image: product?.image || '',
+        stock: product?.stock !== undefined ? parseInt(product.stock) : 0,
+        description: product?.description || ''
       }
     });
   }
@@ -818,144 +784,151 @@ export async function getCartByUserId(userId) {
 }
 
 export async function addOrIncrementCartItem(userId, productId, variantId = '', selectedColor = '', quantity = 1, maxStock = 99) {
-  const rows = await query(
-    'SELECT quantity FROM cart_items WHERE userId = ? AND productId = ? AND variantId = ?',
-    [userId, productId, variantId]
-  );
+  const db = await getDb();
+  const existing = await db.collection('cart_items').findOne({ userId, productId, variantId });
 
-  if (rows.length > 0) {
-    const newQty = parseInt(rows[0].quantity) + quantity;
+  if (existing) {
+    const newQty = parseInt(existing.quantity) + quantity;
     if (newQty > maxStock) {
       throw new Error(`Insufficient stock. Only ${maxStock} items available.`);
     }
-    await query(
-      'UPDATE cart_items SET quantity = ?, selectedColor = ? WHERE userId = ? AND productId = ? AND variantId = ?',
-      [newQty, selectedColor, userId, productId, variantId]
+    await db.collection('cart_items').updateOne(
+      { _id: existing._id },
+      { $set: { quantity: newQty, selectedColor } }
     );
   } else {
     if (quantity > maxStock) {
       throw new Error(`Insufficient stock. Only ${maxStock} items available.`);
     }
-    await query(
-      'INSERT INTO cart_items (userId, productId, variantId, selectedColor, quantity) VALUES (?, ?, ?, ?, ?)',
-      [userId, productId, variantId, selectedColor, quantity]
-    );
+    await db.collection('cart_items').insertOne({
+      _id: `${userId}_${productId}_${variantId}`,
+      userId,
+      productId,
+      variantId,
+      selectedColor,
+      quantity
+    });
   }
   return getCartByUserId(userId);
 }
 
 export async function updateCartItemQuantity(userId, productId, variantId = '', quantity = 1) {
-  await query(
-    'UPDATE cart_items SET quantity = ? WHERE userId = ? AND productId = ? AND variantId = ?',
-    [quantity, userId, productId, variantId]
+  const db = await getDb();
+  await db.collection('cart_items').updateOne(
+    { userId, productId, variantId },
+    { $set: { quantity } }
   );
   return getCartByUserId(userId);
 }
 
 export async function removeCartItem(userId, productId, variantId = '') {
-  await query(
-    'DELETE FROM cart_items WHERE userId = ? AND productId = ? AND variantId = ?',
-    [userId, productId, variantId]
-  );
+  const db = await getDb();
+  await db.collection('cart_items').deleteOne({ userId, productId, variantId });
   return getCartByUserId(userId);
 }
 
 export async function clearCart(userId) {
-  await query('DELETE FROM cart_items WHERE userId = ?', [userId]);
+  const db = await getDb();
+  await db.collection('cart_items').deleteMany({ userId });
 }
 
+// ==========================================
 // Order methods
-export async function createOrder({ id, orderReference, userId, totalAmount, currencyCode, currencyRate, name, email, address, paymentStatus, paymentMethod, createdAt, items }) {
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
+// ==========================================
 
-    // Insert order
-    await connection.query(
-      'INSERT INTO orders (id, orderReference, userId, totalAmount, currencyCode, currencyRate, status, name, email, address, paymentStatus, paymentMethod, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, orderReference, userId, totalAmount, currencyCode || 'USD', currencyRate || 1, 'Pending', name, email, address, paymentStatus || 'Paid', paymentMethod || 'Mock Card', createdAt]
-    );
+export async function createOrder({ id, orderReference, userId, totalAmount, currencyCode, currencyRate, name, email, address, paymentStatus, paymentMethod, platform = 'Direct', createdAt, items }) {
+  const db = await getDb();
+  const orderId = id || uuidv4();
+  const created = createdAt || new Date().toISOString();
 
-    // Insert order items and deduct stock
-    for (const item of items) {
-      const [prodRows] = await connection.query('SELECT stock, name FROM products WHERE id = ? FOR UPDATE', [item.productId]);
-      if (prodRows.length === 0) {
-        throw new Error(`Product not found: ID ${item.productId}`);
-      }
-      const product = prodRows[0];
-      const selectedSize = (item.selectedColor || '').toString().trim();
-      const [sizeRows] = await connection.query('SELECT id, sizeName, stock FROM product_size_inventory WHERE productId = ? FOR UPDATE', [item.productId]);
-      const sizeInventory = Array.isArray(sizeRows) ? sizeRows : [];
-
-      if (sizeInventory.length > 0) {
-        let matchingSize = sizeInventory.find(entry => (entry.sizeName || '').toLowerCase() === selectedSize.toLowerCase());
-        if (!matchingSize) {
-          throw new Error(`Selected size '${selectedSize || 'unknown'}' is unavailable for product '${product.name}'.`);
-        }
-        if (!matchingSize || matchingSize.stock < item.quantity) {
-          const sizeInfo = matchingSize ? ` for size '${matchingSize.sizeName}'` : '';
-          const avail = matchingSize ? matchingSize.stock : 0;
-          throw new Error(`Insufficient stock${sizeInfo} on product '${product.name}'. Only ${avail} left.`);
-        }
-        await connection.query('UPDATE product_size_inventory SET stock = GREATEST(0, stock - ?) WHERE id = ?', [item.quantity, matchingSize.id]);
-      } else if (product.stock < item.quantity) {
-        throw new Error(`Insufficient stock for product '${product.name}'. Only ${product.stock} left.`);
-      }
-
-      await connection.query(
-        'INSERT INTO order_items (orderId, productId, name, price, quantity, image, selectedColor) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [id, item.productId, item.name, item.price, item.quantity, item.image, item.selectedColor || '']
-      );
-
-      if (sizeInventory.length > 0) {
-        const [remainingRows] = await connection.query('SELECT stock FROM product_size_inventory WHERE productId = ? FOR UPDATE', [item.productId]);
-        const remainingStock = (remainingRows || []).reduce((sum, row) => sum + parseInt(row.stock || 0), 0);
-        await connection.query('UPDATE products SET stock = ? WHERE id = ?', [remainingStock, item.productId]);
-      } else {
-        await connection.query(
-          'UPDATE products SET stock = GREATEST(0, stock - ?) WHERE id = ?',
-          [item.quantity, item.productId]
-        );
-      }
+  // Validate and deduct stock
+  for (const item of items) {
+    const product = await db.collection('products').findOne({ id: item.productId });
+    if (!product) {
+      throw new Error(`Product not found: ID ${item.productId}`);
     }
 
-    // Clear cart
-    await connection.query('DELETE FROM cart_items WHERE userId = ?', [userId]);
+    const selectedSize = (item.selectedColor || '').toString().trim();
+    const sizeRows = await db.collection('product_size_inventory').find({ productId: item.productId }).toArray();
 
-    await connection.commit();
-    return getOrderByIdHelper(connection, id);
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
+    if (sizeRows.length > 0) {
+      const matchingSize = sizeRows.find(entry => (entry.sizeName || '').toLowerCase() === selectedSize.toLowerCase());
+      if (!matchingSize) {
+        throw new Error(`Selected size '${selectedSize || 'unknown'}' is unavailable for product '${product.name}'.`);
+      }
+      if (matchingSize.stock < item.quantity) {
+        throw new Error(`Insufficient stock for size '${matchingSize.sizeName}' on product '${product.name}'. Only ${matchingSize.stock} left.`);
+      }
+
+      await db.collection('product_size_inventory').updateOne(
+        { id: matchingSize.id },
+        { $inc: { stock: -item.quantity } }
+      );
+
+      const remainingRows = await db.collection('product_size_inventory').find({ productId: item.productId }).toArray();
+      const remainingStock = remainingRows.reduce((sum, row) => sum + parseInt(row.stock || 0), 0);
+      await db.collection('products').updateOne(
+        { id: item.productId },
+        { $set: { stock: Math.max(0, remainingStock) } }
+      );
+    } else {
+      if (product.stock < item.quantity) {
+        throw new Error(`Insufficient stock for product '${product.name}'. Only ${product.stock} left.`);
+      }
+      await db.collection('products').updateOne(
+        { id: item.productId },
+        { $inc: { stock: -item.quantity } }
+      );
+    }
+
+    // Insert order item
+    await db.collection('order_items').insertOne({
+      id: uuidv4(),
+      orderId,
+      productId: item.productId,
+      name: item.name,
+      price: parseFloat(item.price),
+      quantity: parseInt(item.quantity),
+      image: item.image,
+      selectedColor: item.selectedColor || '',
+      selectedSize: item.selectedSize || ''
+    });
   }
-}
 
-async function getOrderByIdHelper(connection, id) {
-  const [orderRows] = await connection.query('SELECT * FROM orders WHERE id = ?', [id]);
-  if (orderRows.length === 0) return null;
-  const order = orderRows[0];
+  // Insert order
+  await db.collection('orders').insertOne({
+    _id: orderId,
+    id: orderId,
+    orderReference,
+    userId,
+    totalAmount: parseFloat(totalAmount),
+    currencyCode: currencyCode || 'USD',
+    currencyRate: parseFloat(currencyRate || 1),
+    status: 'Pending',
+    name,
+    email,
+    address,
+    paymentStatus: paymentStatus || 'Paid',
+    paymentMethod: paymentMethod || 'Mock Card',
+    platform: platform || 'Direct',
+    refundStatus: 'None',
+    refundAmount: 0.00,
+    createdAt: created
+  });
 
-  const [itemRows] = await connection.query('SELECT * FROM order_items WHERE orderId = ?', [id]);
-  order.items = itemRows.map(item => ({
-    productId: item.productId,
-    name: item.name,
-    price: parseFloat(item.price),
-    quantity: parseInt(item.quantity),
-    image: item.image,
-    selectedColor: item.selectedColor || ''
-  }));
-  order.totalAmount = parseFloat(order.totalAmount);
-  return order;
+  // Clear user's cart
+  await db.collection('cart_items').deleteMany({ userId });
+
+  return await getOrderById(orderId);
 }
 
 export async function getOrderById(id) {
-  const rows = await query('SELECT * FROM orders WHERE id = ?', [id]);
-  if (rows.length === 0) return null;
-  const order = rows[0];
+  if (!id) return null;
+  const db = await getDb();
+  const order = await db.collection('orders').findOne({ $or: [{ id }, { _id: id }] });
+  if (!order) return null;
 
-  const items = await query('SELECT * FROM order_items WHERE orderId = ?', [id]);
+  const items = await db.collection('order_items').find({ orderId: order.id }).toArray();
   order.items = items.map(item => ({
     productId: item.productId,
     name: item.name,
@@ -969,26 +942,31 @@ export async function getOrderById(id) {
 }
 
 export async function getOrders(userId, isAdmin) {
-  let sql = 'SELECT * FROM orders';
-  const params = [];
-
-  if (!isAdmin) {
-    sql += ' WHERE userId = ?';
-    params.push(userId);
+  const db = await getDb();
+  const filter = {};
+  if (!isAdmin && userId) {
+    filter.userId = userId;
   }
 
-  sql += ' ORDER BY createdAt DESC';
-  const orders = await query(sql, params);
+  const orders = await db.collection('orders').find(filter).sort({ createdAt: -1 }).toArray();
+  const orderIds = orders.map(o => o.id);
 
-  for (const order of orders) {
-    const items = await query('SELECT * FROM order_items WHERE orderId = ?', [order.id]);
-    order.items = items.map(item => ({
+  const allItems = await db.collection('order_items').find({ orderId: { $in: orderIds } }).toArray();
+  const itemsByOrder = {};
+  for (const item of allItems) {
+    if (!itemsByOrder[item.orderId]) itemsByOrder[item.orderId] = [];
+    itemsByOrder[item.orderId].push({
       productId: item.productId,
       name: item.name,
       price: parseFloat(item.price),
       quantity: parseInt(item.quantity),
-      image: item.image
-    }));
+      image: item.image,
+      selectedColor: item.selectedColor || ''
+    });
+  }
+
+  for (const order of orders) {
+    order.items = itemsByOrder[order.id] || [];
     order.totalAmount = parseFloat(order.totalAmount);
   }
 
@@ -996,19 +974,38 @@ export async function getOrders(userId, isAdmin) {
 }
 
 export async function updateOrderStatus(orderId, status) {
-  await query('UPDATE orders SET status = ? WHERE id = ?', [status, orderId]);
+  const db = await getDb();
+  await db.collection('orders').updateOne(
+    { $or: [{ id: orderId }, { _id: orderId }] },
+    { $set: { status } }
+  );
+  return getOrderById(orderId);
+}
+
+export async function approveRefund(orderId, refundAmount) {
+  const db = await getDb();
+  await db.collection('orders').updateOne(
+    { $or: [{ id: orderId }, { _id: orderId }] },
+    { $set: { refundStatus: 'Approved', refundAmount: parseFloat(refundAmount) } }
+  );
   return getOrderById(orderId);
 }
 
 export async function deleteOrder(orderId) {
-  await query('DELETE FROM orders WHERE id = ?', [orderId]);
+  const db = await getDb();
+  await db.collection('orders').deleteOne({ $or: [{ id: orderId }, { _id: orderId }] });
+  await db.collection('order_items').deleteMany({ orderId });
 }
 
-// Stats method
+// ==========================================
+// Admin Statistics
+// ==========================================
+
 export async function getAdminStats() {
+  const db = await getDb();
   const orders = await getOrders(null, true);
-  const products = await query('SELECT * FROM products');
-  const catRows = await query('SELECT name FROM categories');
+  const products = await db.collection('products').find({}).toArray();
+  const catRows = await db.collection('categories').find({}, { projection: { name: 1 } }).toArray();
 
   let totalSales = 0;
   let numOrders = orders.length;
@@ -1016,34 +1013,75 @@ export async function getAdminStats() {
   const categorySales = {};
   const categoryQty = {};
   const dailySales = {};
+  const dailyProducts = {};
+  const dailyOrdersCount = {};
 
   catRows.forEach(c => {
     categorySales[c.name] = 0;
     categoryQty[c.name] = 0;
   });
 
+  const platformSales = { Instagram: 0, Facebook: 0, Direct: 0 };
+  const platformOrders = { Instagram: 0, Facebook: 0, Direct: 0 };
+
   orders.forEach(order => {
+    const rawPlat = order.platform || 'Direct';
+    let platKey = 'Direct';
+    if (typeof rawPlat === 'string') {
+      const pLow = rawPlat.toLowerCase();
+      if (pLow.includes('insta')) platKey = 'Instagram';
+      else if (pLow.includes('fb') || pLow.includes('face')) platKey = 'Facebook';
+      else if (pLow.trim()) platKey = rawPlat.trim();
+    }
+
+    if (!platformSales[platKey]) platformSales[platKey] = 0;
+    if (!platformOrders[platKey]) platformOrders[platKey] = 0;
+
+    platformOrders[platKey] += 1;
     if (order.status !== 'Cancelled') {
+      platformSales[platKey] += parseFloat(order.totalAmount || 0);
       totalSales += order.totalAmount;
     }
 
-    const dateStr = order.createdAt.split('T')[0];
+    const dateStr = order.createdAt ? order.createdAt.split('T')[0] : new Date().toISOString().split('T')[0];
     if (!dailySales[dateStr]) {
       dailySales[dateStr] = 0;
+      dailyProducts[dateStr] = {};
+      dailyOrdersCount[dateStr] = 0;
     }
     if (order.status !== 'Cancelled') {
       dailySales[dateStr] += order.totalAmount;
+      dailyOrdersCount[dateStr] += 1;
     }
 
-    order.items.forEach(item => {
-      const originalProduct = products.find(p => p.id === item.productId);
-      const category = originalProduct ? originalProduct.category : 'Other';
+    if (Array.isArray(order.items)) {
+      order.items.forEach(item => {
+        const originalProduct = products.find(p => p.id === item.productId);
+        const category = originalProduct ? originalProduct.category : (item.category || 'Other');
+        const prodName = item.name || originalProduct?.name || 'Product';
+        const prodImage = item.image || originalProduct?.image || '';
 
-      if (order.status !== 'Cancelled') {
-        categorySales[category] = (categorySales[category] || 0) + (item.price * item.quantity);
-        categoryQty[category] = (categoryQty[category] || 0) + item.quantity;
-      }
-    });
+        if (order.status !== 'Cancelled') {
+          categorySales[category] = (categorySales[category] || 0) + (item.price * item.quantity);
+          categoryQty[category] = (categoryQty[category] || 0) + item.quantity;
+
+          const pKey = item.productId || prodName;
+          if (!dailyProducts[dateStr][pKey]) {
+            dailyProducts[dateStr][pKey] = {
+              productId: item.productId,
+              name: prodName,
+              image: prodImage,
+              category: category,
+              price: item.price,
+              quantity: 0,
+              revenue: 0
+            };
+          }
+          dailyProducts[dateStr][pKey].quantity += item.quantity;
+          dailyProducts[dateStr][pKey].revenue += (item.price * item.quantity);
+        }
+      });
+    }
   });
 
   let bestSellingCategory = 'N/A';
@@ -1056,7 +1094,20 @@ export async function getAdminStats() {
   });
 
   const revenueOverTime = Object.entries(dailySales)
-    .map(([date, amount]) => ({ date, amount: parseFloat(amount.toFixed(2)) }))
+    .map(([date, amount]) => {
+      const prodsList = Object.values(dailyProducts[date] || {}).map(p => ({
+        ...p,
+        revenue: parseFloat((p.revenue || 0).toFixed(2))
+      })).sort((a, b) => b.revenue - a.revenue);
+
+      return {
+        date,
+        amount: parseFloat(amount.toFixed(2)),
+        ordersCount: dailyOrdersCount[date] || 0,
+        products: prodsList,
+        topProduct: prodsList[0] || null
+      };
+    })
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 
   const formattedCategorySales = {};
@@ -1064,167 +1115,210 @@ export async function getAdminStats() {
     formattedCategorySales[cat] = parseFloat((amt || 0).toFixed(2));
   });
 
+  const formattedPlatformSales = {};
+  Object.entries(platformSales).forEach(([plat, amt]) => {
+    formattedPlatformSales[plat] = parseFloat((amt || 0).toFixed(2));
+  });
+
   return {
     totalSales: parseFloat(totalSales.toFixed(2)),
     numOrders,
     bestSellingCategory,
     categorySales: formattedCategorySales,
+    platformSales: formattedPlatformSales,
+    platformOrders,
     revenueOverTime,
-    recentOrders: orders.slice(0, 5) // getOrders returns sorted DESC, we take the top 5
+    recentOrders: orders.slice(0, 5)
   };
 }
 
+// ==========================================
 // Email Logging helpers
+// ==========================================
+
 export async function logEmail({ recipient, subject, status, errorMessage }) {
-  await query(
-    'INSERT INTO email_logs (recipient, subject, status, sentAt, errorMessage) VALUES (?, ?, ?, ?, ?)',
-    [recipient.toLowerCase(), subject, status, new Date().toISOString(), errorMessage || null]
-  );
+  const db = await getDb();
+  await db.collection('email_logs').insertOne({
+    id: uuidv4(),
+    recipient: (recipient || '').toLowerCase(),
+    subject,
+    status,
+    sentAt: new Date().toISOString(),
+    errorMessage: errorMessage || null
+  });
 }
 
 export async function hasEmailBeenSent(recipient, subject) {
-  const rows = await query(
-    'SELECT 1 FROM email_logs WHERE LOWER(recipient) = LOWER(?) AND subject = ? AND status = "Success"',
-    [recipient, subject]
-  );
-  return rows.length > 0;
+  const db = await getDb();
+  const existing = await db.collection('email_logs').findOne({
+    recipient: (recipient || '').toLowerCase(),
+    subject,
+    status: 'Success'
+  });
+  return !!existing;
 }
 
+// ==========================================
 // Password Reset helpers
+// ==========================================
+
 export async function createPasswordReset(email, token, expiresAt) {
-  await query(
-    'INSERT INTO password_resets (email, token, expiresAt) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE token = ?, expiresAt = ?',
-    [email.toLowerCase(), token, expiresAt.toISOString(), token, expiresAt.toISOString()]
+  const db = await getDb();
+  const normEmail = (email || '').toLowerCase();
+  await db.collection('password_resets').updateOne(
+    { email: normEmail },
+    {
+      $set: {
+        _id: normEmail,
+        email: normEmail,
+        token,
+        expiresAt: expiresAt.toISOString()
+      }
+    },
+    { upsert: true }
   );
 }
 
 export async function getPasswordReset(token) {
-  const rows = await query(
-    'SELECT * FROM password_resets WHERE token = ?',
-    [token]
-  );
-  return rows[0] || null;
+  const db = await getDb();
+  return await db.collection('password_resets').findOne({ token });
 }
 
 export async function deletePasswordReset(email) {
-  await query('DELETE FROM password_resets WHERE LOWER(email) = LOWER(?)', [email]);
+  const db = await getDb();
+  await db.collection('password_resets').deleteOne({ email: (email || '').toLowerCase() });
 }
 
-// ─── Activity Log helpers ─────────────────────────────────────────────────────
+// ==========================================
+// Activity Log helpers
+// ==========================================
 
 export async function insertActivityLog({ adminId, adminName, action, module, recordId, oldData, newData, ipAddress }) {
+  const db = await getDb();
   const oldDataStr = oldData != null ? JSON.stringify(oldData) : null;
   const newDataStr = newData != null ? JSON.stringify(newData) : null;
-  await query(
-    `INSERT INTO activity_logs (adminId, adminName, action, module, recordId, oldData, newData, ipAddress, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      adminId,
-      adminName,
-      action,
-      module,
-      recordId || null,
-      oldDataStr,
-      newDataStr,
-      ipAddress || null,
-      new Date().toISOString()
-    ]
-  );
+
+  await db.collection('activity_logs').insertOne({
+    id: uuidv4(),
+    adminId,
+    adminName,
+    action,
+    module,
+    recordId: recordId || null,
+    oldData: oldDataStr,
+    newData: newDataStr,
+    ipAddress: ipAddress || null,
+    createdAt: new Date().toISOString()
+  });
 }
 
 export async function getActivityLogs({ page = 1, limit = 20, search = '', action = '', adminId = '', dateFrom = '', dateTo = '' } = {}) {
-  const offset = (parseInt(page) - 1) * parseInt(limit);
-  const conditions = [];
-  const params = [];
+  const db = await getDb();
+  const p = parseInt(page);
+  const l = parseInt(limit);
+  const skip = (p - 1) * l;
+  const filter = {};
 
   if (search) {
-    conditions.push('(adminName LIKE ? OR action LIKE ? OR module LIKE ? OR recordId LIKE ? OR newData LIKE ?)');
-    const s = `%${search}%`;
-    params.push(s, s, s, s, s);
+    const sRegex = new RegExp(search, 'i');
+    filter.$or = [
+      { adminName: sRegex },
+      { action: sRegex },
+      { module: sRegex },
+      { recordId: sRegex },
+      { newData: sRegex }
+    ];
   }
+
   if (action) {
-    conditions.push('action = ?');
-    params.push(action);
+    filter.action = action;
   }
+
   if (adminId) {
-    conditions.push('adminId = ?');
-    params.push(adminId);
-  }
-  if (dateFrom) {
-    conditions.push('createdAt >= ?');
-    params.push(dateFrom);
-  }
-  if (dateTo) {
-    // add one day so dateTo is inclusive
-    const toDate = new Date(dateTo);
-    toDate.setDate(toDate.getDate() + 1);
-    conditions.push('createdAt < ?');
-    params.push(toDate.toISOString());
+    filter.adminId = adminId;
   }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  if (dateFrom || dateTo) {
+    filter.createdAt = {};
+    if (dateFrom) filter.createdAt.$gte = dateFrom;
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setDate(toDate.getDate() + 1);
+      filter.createdAt.$lt = toDate.toISOString();
+    }
+  }
 
-  const countRows = await query(`SELECT COUNT(*) as total FROM activity_logs ${where}`, params);
-  const total = countRows[0].total;
-
-  const rows = await query(
-    `SELECT * FROM activity_logs ${where} ORDER BY createdAt DESC LIMIT ${parseInt(limit)} OFFSET ${offset}`,
-    params
-  );
+  const total = await db.collection('activity_logs').countDocuments(filter);
+  const rows = await db.collection('activity_logs')
+    .find(filter)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(l)
+    .toArray();
 
   return {
     logs: rows,
     total,
-    page: parseInt(page),
-    limit: parseInt(limit),
-    totalPages: Math.ceil(total / parseInt(limit))
+    page: p,
+    limit: l,
+    totalPages: Math.ceil(total / l)
   };
 }
 
 export async function getActivityLogsMeta() {
-  const actions = await query('SELECT DISTINCT action FROM activity_logs ORDER BY action ASC');
-  const admins = await query('SELECT DISTINCT adminId, adminName FROM activity_logs ORDER BY adminName ASC');
+  const db = await getDb();
+  const actions = await db.collection('activity_logs').distinct('action');
+  actions.sort();
+
+  const adminAgg = await db.collection('activity_logs').aggregate([
+    { $group: { _id: '$adminId', name: { $first: '$adminName' } } },
+    { $sort: { name: 1 } }
+  ]).toArray();
+
   return {
-    actions: actions.map(r => r.action),
-    admins: admins.map(r => ({ id: r.adminId, name: r.adminName }))
+    actions,
+    admins: adminAgg.map(r => ({ id: r._id, name: r.name }))
   };
 }
 
-// Category Helper Methods
+// ==========================================
+// Category methods
+// ==========================================
+
 export async function getAllCategories() {
-  const sql = `
-    SELECT 
-      c.id, 
-      c.name, 
-      c.image,
-      c.subtitle,
-      c.createdAt, 
-      COUNT(p.id) AS productCount
-    FROM categories c
-    LEFT JOIN products p ON LOWER(c.name) = LOWER(p.category)
-    GROUP BY c.id, c.name, c.image, c.subtitle, c.createdAt
-    ORDER BY c.name ASC
-  `;
-  const rows = await query(sql);
-  return rows.map(r => ({
-    id: r.id,
-    name: r.name,
-    image: r.image || '',
-    subtitle: r.subtitle || '',
-    createdAt: r.createdAt,
-    productCount: parseInt(r.productCount || 0)
-  }));
+  const db = await getDb();
+  const categories = await db.collection('categories').find({}).sort({ name: 1 }).toArray();
+  const result = [];
+
+  for (const c of categories) {
+    const count = await db.collection('products').countDocuments({
+      category: { $regex: new RegExp(`^${c.name}$`, 'i') }
+    });
+    result.push({
+      id: c.id,
+      name: c.name,
+      image: c.image || '',
+      subtitle: c.subtitle || '',
+      createdAt: c.createdAt,
+      productCount: count
+    });
+  }
+
+  return result;
 }
 
 export async function findCategoryByName(name) {
   if (!name) return null;
-  const rows = await query('SELECT * FROM categories WHERE LOWER(name) = LOWER(?)', [name.trim()]);
-  return rows[0] || null;
+  const db = await getDb();
+  return await db.collection('categories').findOne({
+    name: { $regex: new RegExp(`^${name.trim()}$`, 'i') }
+  });
 }
 
 export async function findCategoryById(id) {
-  const rows = await query('SELECT * FROM categories WHERE id = ?', [id]);
-  return rows[0] || null;
+  if (!id) return null;
+  const db = await getDb();
+  return await db.collection('categories').findOne({ $or: [{ id }, { _id: id }] });
 }
 
 export async function createCategory({ name, image = '', subtitle = '' }) {
@@ -1236,20 +1330,27 @@ export async function createCategory({ name, image = '', subtitle = '' }) {
     throw error;
   }
 
+  const db = await getDb();
   const id = uuidv4();
   const createdAt = new Date().toISOString();
   const cleanImage = (image || '').trim();
   const cleanSubtitle = (subtitle || '').trim();
 
-  await query(
-    'INSERT INTO categories (id, name, image, subtitle, createdAt) VALUES (?, ?, ?, ?, ?)',
-    [id, trimmed, cleanImage, cleanSubtitle, createdAt]
-  );
+  const newCat = {
+    _id: id,
+    id,
+    name: trimmed,
+    image: cleanImage,
+    subtitle: cleanSubtitle,
+    createdAt
+  };
 
+  await db.collection('categories').insertOne(newCat);
   return { id, name: trimmed, image: cleanImage, subtitle: cleanSubtitle, createdAt, productCount: 0 };
 }
 
 export async function updateCategory(id, { name, image, subtitle }) {
+  const db = await getDb();
   const category = await findCategoryById(id);
   if (!category) {
     const error = new Error('Category not found.');
@@ -1269,19 +1370,27 @@ export async function updateCategory(id, { name, image, subtitle }) {
   const cleanImage = image !== undefined ? (image || '').trim() : (category.image || '');
   const cleanSubtitle = subtitle !== undefined ? (subtitle || '').trim() : (category.subtitle || '');
 
-  await query('UPDATE categories SET name = ?, image = ?, subtitle = ? WHERE id = ?', [newName, cleanImage, cleanSubtitle, id]);
+  await db.collection('categories').updateOne(
+    { $or: [{ id }, { _id: id }] },
+    { $set: { name: newName, image: cleanImage, subtitle: cleanSubtitle } }
+  );
 
-  if (oldName !== newName) {
-    await query('UPDATE products SET category = ? WHERE LOWER(category) = LOWER(?)', [newName, oldName]);
+  if (oldName.toLowerCase() !== newName.toLowerCase()) {
+    await db.collection('products').updateMany(
+      { category: { $regex: new RegExp(`^${oldName}$`, 'i') } },
+      { $set: { category: newName } }
+    );
   }
 
-  const countRows = await query('SELECT COUNT(*) as count FROM products WHERE LOWER(category) = LOWER(?)', [newName]);
-  const productCount = countRows[0] ? parseInt(countRows[0].count) : 0;
+  const productCount = await db.collection('products').countDocuments({
+    category: { $regex: new RegExp(`^${newName}$`, 'i') }
+  });
 
   return { id, name: newName, image: cleanImage, subtitle: cleanSubtitle, createdAt: category.createdAt, productCount };
 }
 
 export async function deleteCategory(id) {
+  const db = await getDb();
   const category = await findCategoryById(id);
   if (!category) {
     const error = new Error('Category not found.');
@@ -1289,8 +1398,9 @@ export async function deleteCategory(id) {
     throw error;
   }
 
-  const countRows = await query('SELECT COUNT(*) as count FROM products WHERE LOWER(category) = LOWER(?)', [category.name]);
-  const productCount = countRows[0] ? parseInt(countRows[0].count) : 0;
+  const productCount = await db.collection('products').countDocuments({
+    category: { $regex: new RegExp(`^${category.name}$`, 'i') }
+  });
 
   if (productCount > 0) {
     const error = new Error(`Cannot delete category "${category.name}" because it is currently assigned to ${productCount} product(s). Please reassign or delete those products first.`);
@@ -1298,16 +1408,20 @@ export async function deleteCategory(id) {
     throw error;
   }
 
-  await query('DELETE FROM categories WHERE id = ?', [id]);
+  await db.collection('categories').deleteOne({ $or: [{ id }, { _id: id }] });
   return { success: true, message: `Category "${category.name}" deleted successfully.` };
 }
 
+// ==========================================
+// Site Settings
+// ==========================================
+
 export async function getFeaturedNotificationSetting() {
-  const rows = await query('SELECT setting_key, setting_value FROM site_settings WHERE setting_key IN (?, ?)', [
-    'notification_enabled',
-    'notification_product_id'
-  ]);
-  
+  const db = await getDb();
+  const rows = await db.collection('site_settings').find({
+    setting_key: { $in: ['notification_enabled', 'notification_product_id'] }
+  }).toArray();
+
   let enabled = true;
   let productId = '';
 
@@ -1324,10 +1438,9 @@ export async function getFeaturedNotificationSetting() {
   if (productId) {
     product = await getProductById(productId);
   }
-  
-  // If no explicit product found/selected, default to newest product
+
   if (!product) {
-    const newest = await query('SELECT id FROM products ORDER BY createdAt DESC LIMIT 1');
+    const newest = await db.collection('products').find({}).sort({ createdAt: -1 }).limit(1).toArray();
     if (newest && newest[0]) {
       product = await getProductById(newest[0].id);
     }
@@ -1341,42 +1454,77 @@ export async function getFeaturedNotificationSetting() {
 }
 
 export async function updateFeaturedNotificationSetting(enabled, productId = '') {
-  await query('INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?', [
-    'notification_enabled',
-    enabled ? 'true' : 'false',
-    enabled ? 'true' : 'false'
-  ]);
+  const db = await getDb();
+  await db.collection('site_settings').updateOne(
+    { setting_key: 'notification_enabled' },
+    {
+      $set: {
+        _id: 'notification_enabled',
+        setting_key: 'notification_enabled',
+        setting_value: enabled ? 'true' : 'false',
+        updated_at: new Date()
+      }
+    },
+    { upsert: true }
+  );
 
-  await query('INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?', [
-    'notification_product_id',
-    productId || '',
-    productId || ''
-  ]);
+  await db.collection('site_settings').updateOne(
+    { setting_key: 'notification_product_id' },
+    {
+      $set: {
+        _id: 'notification_product_id',
+        setting_key: 'notification_product_id',
+        setting_value: productId || '',
+        updated_at: new Date()
+      }
+    },
+    { upsert: true }
+  );
 
   return getFeaturedNotificationSetting();
 }
 
+// ==========================================
+// Support Queries
+// ==========================================
+
 export async function createSupportQuery({ name, email, category, message }) {
-  const result = await query(
-    'INSERT INTO support_queries (name, email, category, message, status) VALUES (?, ?, ?, ?, ?)',
-    [name, email, category, message, 'Pending']
-  );
-  return { id: result.insertId, name, email, category, message, status: 'Pending', createdAt: new Date() };
+  const db = await getDb();
+  const doc = {
+    id: uuidv4(),
+    name,
+    email,
+    category,
+    message,
+    status: 'Pending',
+    createdAt: new Date().toISOString()
+  };
+  await db.collection('support_queries').insertOne(doc);
+  return doc;
 }
 
 export async function getAllSupportQueries() {
-  return await query('SELECT * FROM support_queries ORDER BY createdAt DESC');
+  const db = await getDb();
+  return await db.collection('support_queries').find({}).sort({ createdAt: -1 }).toArray();
 }
 
 export async function updateSupportQueryStatus(id, status) {
-  await query('UPDATE support_queries SET status = ? WHERE id = ?', [status, id]);
-  const rows = await query('SELECT * FROM support_queries WHERE id = ?', [id]);
-  return rows[0];
+  const db = await getDb();
+  await db.collection('support_queries').updateOne(
+    { $or: [{ id }, { _id: id }] },
+    { $set: { status } }
+  );
+  return await db.collection('support_queries').findOne({ $or: [{ id }, { _id: id }] });
 }
 
 export async function deleteSupportQuery(id) {
-  await query('DELETE FROM support_queries WHERE id = ?', [id]);
+  const db = await getDb();
+  await db.collection('support_queries').deleteOne({ $or: [{ id }, { _id: id }] });
 }
+
+// ==========================================
+// Product Recommendations Engine
+// ==========================================
 
 const PRODUCT_TYPES = [
   'shirt', 'jeans', 'denim', 'sweater', 'coat', 'tee', 't-shirt', 'set',

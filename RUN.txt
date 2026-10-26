@@ -1,13 +1,11 @@
-cd C:\Users\shahi\Desktop\Website\backend
-npm run dev
+# TrendVibz Run Guide
 
-cd C:\Users\shahi\Desktop\Website\frontend
-npm run dev -- --host 0.0.0.0
+# From the project root:
+npm run backend
+npm run frontend
 
-From the project root you can also run:
+# To expose frontend across local network:
+npm run frontend:host
 
-npm.cmd run backend
-npm.cmd run frontend
-
-
-netsh wlan show profile name="StormFiber-2.4G" key=clear
+# To stop a process holding port 5000:
+npx kill-port 5000

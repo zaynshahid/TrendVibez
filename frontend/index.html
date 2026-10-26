@@ -8,6 +8,34 @@
     <meta name="description" content="Discover premium fashion for Men, Women, and Kids at TrendVibe. Explore our elegant collections with quick shipping, active cart, and secure checkout." />
     <!-- Google Identity Services (Sign-In) API Client Library -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Early Social & Referral Traffic Detector -->
+    <script>
+      (function() {
+        try {
+          var url = new URL(window.location.href);
+          var searchParams = url.searchParams;
+          var refParam = (searchParams.get('source') || searchParams.get('ref') || searchParams.get('utm_source') || searchParams.get('platform') || '').toLowerCase();
+          var hasFbclid = searchParams.has('fbclid');
+          var hasIgshid = searchParams.has('igshid') || searchParams.has('ig_mid');
+          var referrer = (document.referrer || '').toLowerCase();
+
+          var detected = null;
+          if (refParam.indexOf('insta') !== -1 || hasIgshid || referrer.indexOf('instagram.com') !== -1) {
+            detected = 'Instagram';
+          } else if (refParam.indexOf('fb') !== -1 || refParam.indexOf('face') !== -1 || hasFbclid || referrer.indexOf('facebook.com') !== -1 || referrer.indexOf('fb.me') !== -1 || referrer.indexOf('messenger.com') !== -1) {
+            detected = 'Facebook';
+          } else if (refParam) {
+            detected = refParam.charAt(0).toUpperCase() + refParam.slice(1);
+          }
+
+          if (detected) {
+            sessionStorage.setItem('tv_referral_source', detected);
+            localStorage.setItem('tv_last_platform_source', detected);
+            document.cookie = 'tv_source=' + encodeURIComponent(detected) + '; path=/; max-age=2592000; SameSite=Lax';
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

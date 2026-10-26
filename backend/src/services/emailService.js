@@ -13,6 +13,7 @@ import { getPasswordResetHtml } from '../templates/passwordReset.js';
 import { getContactUsHtml } from '../templates/contactUs.js';
 import { getLowStockHtml } from '../templates/lowStock.js';
 import { getAdminOrderPlacedHtml } from '../templates/adminOrderPlaced.js';
+import { getOrderRefundApprovedHtml } from '../templates/orderRefundApproved.js';
 
 // ─── Nodemailer Gmail Transporter ────────────────────────────────────────────
 let transporterInstance = null;
@@ -160,3 +161,10 @@ export async function sendAdminOrderPlacedEmail(adminEmail, order) {
   const subject = `🎉 New Order Placed: ${order.orderReference || order.id}`;
   return safeSend({ to: adminEmail, subject, html });
 }
+
+export async function sendRefundApprovedEmail(order, refundAmount) {
+  const html = getOrderRefundApprovedHtml(order, refundAmount);
+  const subject = `Your refund has been approved – ${order.orderReference || order.id}`;
+  return safeSend({ to: order.email, subject, html, preventDuplicate: false });
+}
+

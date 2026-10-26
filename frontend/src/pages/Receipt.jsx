@@ -1,7 +1,9 @@
 import React, { useEffect } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { CheckCircle2, Printer, ShoppingBag, ClipboardList } from 'lucide-react';
+import { CheckCircle2, Printer, ShoppingBag, ClipboardList, ExternalLink, Zap } from 'lucide-react';
 import { useCurrency } from '../context/CurrencyContext.jsx';
+
+const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/test_aFa7sMa2Bg2Pd14e5f1Jm00';
 
 export default function Receipt() {
   const location = useLocation();
@@ -9,6 +11,7 @@ export default function Receipt() {
   const { formatPrice, formatPriceWithCurrency } = useCurrency();
 
   const order = location.state?.order;
+  const isStripe = order?.paymentMethod?.toLowerCase().includes('stripe');
 
   useEffect(() => {
     // Redirect if they access receipt page directly without placing an order
@@ -47,12 +50,38 @@ export default function Receipt() {
           <CheckCircle2 className="h-12 w-12 animate-bounce" />
         </div>
         <h1 className="text-3xl font-extrabold tracking-tight text-brown-dark leading-tight">
-          Payment Successful!
+          Order Placed Successfully!
         </h1>
         <p className="text-sm font-semibold text-brown-dark/80 max-w-md mx-auto">
           Thank you for your purchase. Your order has been registered in our database. A receipt copy is shown below.
         </p>
       </div>
+
+      {/* Stripe Payment Link Action Banner if Stripe was used */}
+      {isStripe && (
+        <div className="rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50/90 via-purple-50/50 to-indigo-50/90 p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 no-print">
+          <div className="flex items-center gap-3.5">
+            <div className="rounded-2xl bg-indigo-600 p-3 text-white shadow-sm">
+              <Zap className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-indigo-950">Stripe Payment Link</h3>
+              <p className="text-xs font-semibold text-indigo-900/80 mt-0.5">
+                Need to complete or review your checkout on Stripe?
+              </p>
+            </div>
+          </div>
+          <a
+            href={STRIPE_PAYMENT_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow hover:bg-indigo-700 transition-all shrink-0 cursor-pointer"
+          >
+            <span>Open Stripe Checkout</span>
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      )}
 
       {/* Invoice Card Container */}
       <div className="payment-panel p-8 rounded-3xl shadow-sm space-y-8">
@@ -85,7 +114,7 @@ export default function Receipt() {
             <span className="font-extrabold text-brown-dark block uppercase tracking-wider">Payment Metadata</span>
             <p>Email: <span className="font-bold text-brown-dark">{order.email}</span></p>
             <p>Method: <span className="font-bold text-brown-dark">{order.paymentMethod}</span></p>
-            <p>Status: <span className="font-bold text-olive uppercase">Paid</span></p>
+            <p>Status: <span className="font-bold text-olive uppercase">{order.paymentStatus || 'Paid'}</span></p>
           </div>
         </div>
 

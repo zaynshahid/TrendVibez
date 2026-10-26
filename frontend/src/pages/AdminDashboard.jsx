@@ -24,12 +24,41 @@ import {
   BellOff,
   Eye,
   Save,
-  Percent
+  Percent,
+  Filter,
+  SlidersHorizontal,
+  RotateCcw,
+  CheckSquare,
+  Square,
+  DollarSign,
+  Layers,
+  Instagram,
+  Package,
+  Calendar,
+  Info,
+  Globe
 } from 'lucide-react';
+
 import ActivityLogTab from '../components/ActivityLogTab.jsx';
 import ProductNotificationModal from '../components/ProductNotificationModal.jsx';
+import InstagramPublishModal from '../components/InstagramPublishModal.jsx';
+import MultiInstagramPublishModal from '../components/MultiInstagramPublishModal.jsx';
+import InstagramIcon from '../components/InstagramIcon.jsx';
+import FacebookPublishModal from '../components/FacebookPublishModal.jsx';
+import MultiFacebookPublishModal from '../components/MultiFacebookPublishModal.jsx';
+import FacebookIcon from '../components/FacebookIcon.jsx';
+
+
+
+import { 
+  CATEGORY_DEFINITIONS, 
+  CATEGORY_SUBCATEGORIES_MAP, 
+  getSubcategoriesForCategory, 
+  getAllDefinedSubcategories 
+} from '../constants/categories.js';
 
 export default function AdminDashboard() {
+
   const { token, user: activeAdmin } = useAuth();
 
   // Active Tab
@@ -64,6 +93,9 @@ export default function AdminDashboard() {
   const [pDescription, setPDescription] = useState('');
   const [pPrice, setPPrice] = useState('');
   const [pCategory, setPCategory] = useState('Men');
+  const [pSubcategory, setPSubcategory] = useState('');
+  const [pBrand, setPBrand] = useState('');
+  const [pGender, setPGender] = useState('Unisex');
   const [pImage, setPImage] = useState('');
   const [pStock, setPStock] = useState('');
   const [pVariants, setPVariants] = useState([]);
@@ -76,15 +108,76 @@ export default function AdminDashboard() {
   const [notifSaving, setNotifSaving] = useState(false);
   const [notifPreviewOpen, setNotifPreviewOpen] = useState(false);
 
-  // Products filter state
+  // Enhanced Products filter state
   const [productSearch, setProductSearch] = useState('');
   const [productCatFilter, setProductCatFilter] = useState('All');
+  const [productSubcatFilter, setProductSubcatFilter] = useState('All');
+  const [productBrandFilter, setProductBrandFilter] = useState('');
+  const [productGenderFilter, setProductGenderFilter] = useState('All');
+  const [minPriceFilter, setMinPriceFilter] = useState('');
+  const [maxPriceFilter, setMaxPriceFilter] = useState('');
+  const [discountStatusFilter, setDiscountStatusFilter] = useState('All');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Discount feature state
   const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const [bulkDiscountInput, setBulkDiscountInput] = useState('');
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
+
+  // Instagram Publishing Modal States
+  const [isIgModalOpen, setIsIgModalOpen] = useState(false);
+  const [igSelectedProduct, setIgSelectedProduct] = useState(null);
+  const [isMultiIgModalOpen, setIsMultiIgModalOpen] = useState(false);
+
+  // Facebook Publishing Modal States
+  const [isFbModalOpen, setIsFbModalOpen] = useState(false);
+  const [fbSelectedProduct, setFbSelectedProduct] = useState(null);
+  const [isMultiFbModalOpen, setIsMultiFbModalOpen] = useState(false);
+
+  // Revenue Chart Interactive States
+  const [selectedChartPoint, setSelectedChartPoint] = useState(null);
+  const [hoveredChartPoint, setHoveredChartPoint] = useState(null);
+
+  // Refund Modal States
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [refundTargetOrder, setRefundTargetOrder] = useState(null);
+  const [refundAmountInput, setRefundAmountInput] = useState('');
+  const [refundSubmitting, setRefundSubmitting] = useState(false);
+
+
+  const openInstagramPublish = (product = null) => {
+    if (!product && selectedProductIds.length > 0) {
+      setIsMultiIgModalOpen(true);
+      return;
+    }
+    setIgSelectedProduct(product);
+    setIsIgModalOpen(true);
+  };
+
+  const openMultiInstagramPublish = () => {
+    if (selectedProductIds.length === 0) return;
+    setIsMultiIgModalOpen(true);
+  };
+
+  const openFacebookPublish = (product = null) => {
+    if (!product && selectedProductIds.length > 0) {
+      setIsMultiFbModalOpen(true);
+      return;
+    }
+    setFbSelectedProduct(product);
+    setIsFbModalOpen(true);
+  };
+
+  const openMultiFacebookPublish = () => {
+    if (selectedProductIds.length === 0) return;
+    setIsMultiFbModalOpen(true);
+  };
+
+
+
+
+
 
   // Load admin dashboards data
   const loadData = async () => {
@@ -96,7 +189,21 @@ export default function AdminDashboard() {
       await Promise.all([
         fetch(`${API_URL}/admin/stats`, { headers })
           .then(r => r.ok ? r.json() : null)
-          .then(data => { if (data) setStats(data); }),
+          .then(data => { 
+            if (data) {
+              setStats(data);
+              if (data.revenueOverTime && data.revenueOverTime.length > 0) {
+                setSelectedChartPoint(prev => {
+                  if (prev) {
+                    const match = data.revenueOverTime.find(d => d.date === prev.date);
+                    return match || data.revenueOverTime[data.revenueOverTime.length - 1];
+                  }
+                  return data.revenueOverTime[data.revenueOverTime.length - 1];
+                });
+              }
+            }
+          }),
+
         fetch(`${API_URL}/products`)
           .then(r => r.ok ? r.json() : [])
           .then(data => setProducts(data)),
@@ -261,6 +368,9 @@ export default function AdminDashboard() {
     setPDescription('');
     setPPrice('');
     setPCategory(categories.length > 0 ? categories[0].name : 'Men');
+    setPSubcategory('');
+    setPBrand('');
+    setPGender('Unisex');
     setPImage('');
     setPStock('0');
     setPVariants([]);
@@ -275,6 +385,9 @@ export default function AdminDashboard() {
     setPDescription(product.description);
     setPPrice(product.price.toString());
     setPCategory(product.category);
+    setPSubcategory(product.subcategory || '');
+    setPBrand(product.brand || '');
+    setPGender(product.gender || (product.category === 'Men' ? 'Men' : product.category === 'Women' ? 'Women' : product.category === 'Kids' ? 'Kids' : 'Unisex'));
     setPImage(product.image);
     setPStock(product.stock.toString());
     const loadedVariants = product.variants ? product.variants.map(v => ({ ...v, id: v.id || crypto.randomUUID() })) : [];
@@ -300,6 +413,9 @@ export default function AdminDashboard() {
       description: pDescription,
       price: parseFloat(pPrice),
       category: pCategory,
+      subcategory: pSubcategory,
+      brand: pBrand,
+      gender: pGender,
       image: pImage,
       stock: calculatedStock,
       variants: pVariants.map(v => ({ ...v, variantType: pVariantType }))
@@ -386,6 +502,52 @@ export default function AdminDashboard() {
     }
   };
 
+  const openRefundModal = (order) => {
+    if (!order) return;
+    const total = parseFloat(order.totalAmount || 0);
+    setRefundTargetOrder(order);
+    setRefundAmountInput(total.toFixed(2));
+    setIsRefundModalOpen(true);
+  };
+
+  const handleRefundApprove = async () => {
+    if (!refundTargetOrder) return;
+    const amount = parseFloat(refundAmountInput);
+    const orderTotal = parseFloat(refundTargetOrder.totalAmount || 0);
+    if (isNaN(amount) || amount <= 0) {
+      triggerError('Please enter a valid refund amount.');
+      return;
+    }
+    if (amount > orderTotal) {
+      triggerError(`Refund cannot exceed the order total of $${orderTotal.toFixed(2)}.`);
+      return;
+    }
+    setRefundSubmitting(true);
+    try {
+      const res = await fetch(`${API_URL}/orders/${refundTargetOrder.id}/refund`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ refundAmount: amount })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to approve refund.');
+
+      setIsRefundModalOpen(false);
+      setRefundTargetOrder(null);
+      setRefundAmountInput('');
+      triggerSuccess(`Refund of $${amount.toFixed(2)} approved for order ${data.orderReference}. Customer notified by email.`);
+      loadData();
+    } catch (err) {
+      triggerError(err.message);
+    } finally {
+      setRefundSubmitting(false);
+    }
+  };
+
+
   const getOrderStatusBadgeClass = (status) => {
     switch (status) {
       case 'Processing':
@@ -400,6 +562,32 @@ export default function AdminDashboard() {
       default:
         return 'bg-amber-50 text-amber-700 border-amber-200';
     }
+  };
+
+  const renderPlatformBadge = (platform) => {
+    const p = (platform || 'Direct').toLowerCase();
+    if (p.includes('insta')) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-rose-500/10 border border-pink-200 dark:border-pink-900/60 px-2.5 py-1 text-[10px] font-bold text-pink-700 dark:text-pink-300 shadow-xs">
+          <InstagramIcon className="h-3.5 w-3.5" />
+          <span>Instagram</span>
+        </span>
+      );
+    }
+    if (p.includes('fb') || p.includes('face')) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 px-2.5 py-1 text-[10px] font-bold text-blue-700 dark:text-blue-300 shadow-xs">
+          <FacebookIcon className="h-3.5 w-3.5" />
+          <span>Facebook</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+        <Globe className="h-3.5 w-3.5 text-slate-500" />
+        <span>Direct Web</span>
+      </span>
+    );
   };
 
   // USER ACTIONS
@@ -478,12 +666,79 @@ export default function AdminDashboard() {
   };
 
 
-  // Filter products for local view
+  // Reset all filters helper
+  const handleResetFilters = () => {
+    setProductSearch('');
+    setProductCatFilter('All');
+    setProductSubcatFilter('All');
+    setProductBrandFilter('');
+    setProductGenderFilter('All');
+    setMinPriceFilter('');
+    setMaxPriceFilter('');
+    setDiscountStatusFilter('All');
+  };
+
+  const hasActiveFilters = 
+    productSearch !== '' || 
+    productCatFilter !== 'All' || 
+    productSubcatFilter !== 'All' || 
+    productBrandFilter !== '' || 
+    productGenderFilter !== 'All' || 
+    minPriceFilter !== '' || 
+    maxPriceFilter !== '' || 
+    discountStatusFilter !== 'All';
+
+  // Enhanced multi-attribute filter products for local view
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
-                          p.description.toLowerCase().includes(productSearch.toLowerCase());
+    // 1. Search Query (name, description, id, brand, subcategory, category)
+    const q = productSearch.trim().toLowerCase();
+    const matchesSearch = !q || 
+      (p.name && p.name.toLowerCase().includes(q)) || 
+      (p.description && p.description.toLowerCase().includes(q)) || 
+      (p.id && p.id.toLowerCase().includes(q)) ||
+      (p.category && p.category.toLowerCase().includes(q)) ||
+      (p.subcategory && p.subcategory.toLowerCase().includes(q)) ||
+      (p.brand && p.brand.toLowerCase().includes(q));
+
+    // 2. Category Filter
     const matchesCat = productCatFilter === 'All' || p.category === productCatFilter;
-    return matchesSearch && matchesCat;
+
+    // 3. Subcategory Filter
+    const subcat = productSubcatFilter.trim().toLowerCase();
+    const pSub = (p.subcategory || '').toLowerCase();
+    const pFullText = (p.name + ' ' + p.description + ' ' + p.category).toLowerCase();
+    const matchesSubcat = productSubcatFilter === 'All' || 
+      (pSub && pSub.includes(subcat)) || 
+      (!pSub && pFullText.includes(subcat));
+
+    // 4. Brand Filter
+    const b = productBrandFilter.trim().toLowerCase();
+    const pBrandVal = (p.brand || '').toLowerCase();
+    const matchesBrand = !b || 
+      (pBrandVal && pBrandVal.includes(b)) || 
+      (!pBrandVal && pFullText.includes(b));
+
+    // 5. Gender Filter
+    const g = productGenderFilter.toLowerCase();
+    const pGenderVal = (p.gender || p.category || '').toLowerCase();
+    const matchesGender = productGenderFilter === 'All' || 
+      pGenderVal.includes(g) || 
+      pFullText.includes(g);
+
+    // 6. Price Range Filter
+    const pPriceVal = parseFloat(p.price);
+    const minP = minPriceFilter !== '' ? parseFloat(minPriceFilter) : null;
+    const maxP = maxPriceFilter !== '' ? parseFloat(maxPriceFilter) : null;
+    const matchesMinPrice = minP === null || isNaN(minP) || pPriceVal >= minP;
+    const matchesMaxPrice = maxP === null || isNaN(maxP) || pPriceVal <= maxP;
+
+    // 7. Discount Status Filter
+    const disc = parseFloat(p.discountPercent || 0);
+    const matchesDiscount = discountStatusFilter === 'All' ||
+      (discountStatusFilter === 'Discounted' && disc > 0) ||
+      (discountStatusFilter === 'NonDiscounted' && disc === 0);
+
+    return matchesSearch && matchesCat && matchesSubcat && matchesBrand && matchesGender && matchesMinPrice && matchesMaxPrice && matchesDiscount;
   });
 
   const toggleProductSelect = (id) => {
@@ -493,11 +748,15 @@ export default function AdminDashboard() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedProductIds.length === filteredProducts.length) {
+    if (selectedProductIds.length === filteredProducts.length && filteredProducts.length > 0) {
       setSelectedProductIds([]);
     } else {
       setSelectedProductIds(filteredProducts.map(p => p.id));
     }
+  };
+
+  const selectAllFiltered = () => {
+    setSelectedProductIds(filteredProducts.map(p => p.id));
   };
 
   if (loading && !stats) {
@@ -511,89 +770,309 @@ export default function AdminDashboard() {
     );
   }
 
-  // Render SVG Revenue Line Graph
+  // Render SVG Revenue Line Graph with Interactive Product Breakdown
   const renderRevenueChart = () => {
     if (!stats || !stats.revenueOverTime || stats.revenueOverTime.length === 0) {
       return (
-        <div className="h-40 flex items-center justify-center text-xs text-slate-450 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
-          No sales logs recorded yet. Line chart will populate once orders are completed.
+        <div className="h-48 flex flex-col items-center justify-center text-xs text-slate-450 border border-dashed border-slate-200 dark:border-slate-800 rounded-3xl p-6 gap-2">
+          <TrendingUp className="h-6 w-6 text-slate-400 stroke-1" />
+          <span>No sales logs recorded yet. Line chart will populate once orders are completed.</span>
         </div>
       );
     }
 
     const dataPoints = stats.revenueOverTime;
-    const maxVal = Math.max(...dataPoints.map(d => d.amount), 100);
-    const height = 180;
-    const width = 600;
-    const padding = 30;
+    const maxVal = Math.max(...dataPoints.map(d => d.amount), 100) * 1.15; // 15% headroom
+    const height = 190;
+    const width = 620;
+    const paddingLeft = 45;
+    const paddingRight = 25;
+    const paddingTop = 20;
+    const paddingBottom = 35;
 
     // Map data points to coordinates
     const points = dataPoints.map((dp, i) => {
-      const x = padding + (i * (width - 2 * padding)) / (dataPoints.length > 1 ? dataPoints.length - 1 : 1);
-      const y = height - padding - (dp.amount * (height - 2 * padding)) / maxVal;
+      let x = paddingLeft;
+      if (dataPoints.length > 1) {
+        x = paddingLeft + (i * (width - paddingLeft - paddingRight)) / (dataPoints.length - 1);
+      } else {
+        x = width / 2;
+      }
+      const y = height - paddingBottom - (dp.amount * (height - paddingTop - paddingBottom)) / maxVal;
       return { x, y, dp };
     });
 
     const polylineString = points.map(p => `${p.x},${p.y}`).join(' ');
 
+    // Active inspected data point (hovered or clicked or default to latest)
+    const activePoint = hoveredChartPoint?.dp || selectedChartPoint || dataPoints[dataPoints.length - 1];
+    const activePointCoord = points.find(p => p.dp.date === activePoint?.date) || points[points.length - 1];
+
     return (
-      <div className="relative w-full overflow-x-auto no-scrollbar">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full min-w-[500px]">
-          {/* Grid lines */}
-          <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#cbd5e1" strokeWidth="1" className="dark:stroke-slate-800" />
-          <line x1={padding} y1={padding} x2={width - padding} y2={padding} stroke="#f1f5f9" strokeWidth="1" className="dark:stroke-slate-900" />
+      <div className="space-y-6">
+        {/* Chart Container & Interactive Overlay */}
+        <div className="relative w-full rounded-2xl bg-slate-50/50 dark:bg-slate-950/40 p-3 border border-slate-100 dark:border-slate-800/80">
+          <div className="relative w-full overflow-x-auto no-scrollbar">
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto min-w-[520px]">
+              {/* Grid Lines & Y-Axis Reference Labels */}
+              {[0, 0.5, 1].map((pct, idx) => {
+                const yVal = height - paddingBottom - pct * (height - paddingTop - paddingBottom);
+                const dollarVal = Math.round((pct * maxVal));
+                return (
+                  <g key={idx}>
+                    <line 
+                      x1={paddingLeft} 
+                      y1={yVal} 
+                      x2={width - paddingRight} 
+                      y2={yVal} 
+                      stroke="#e2e8f0" 
+                      strokeDasharray={pct > 0 ? "4 4" : "0"} 
+                      strokeWidth="1" 
+                      className="dark:stroke-slate-800/80" 
+                    />
+                    <text 
+                      x={paddingLeft - 8} 
+                      y={yVal + 3} 
+                      textAnchor="end" 
+                      fontSize="9" 
+                      fill="#94a3b8" 
+                      className="font-mono font-semibold"
+                    >
+                      ${dollarVal}
+                    </text>
+                  </g>
+                );
+              })}
 
-          {/* Polyline Path */}
-          <polyline
-            fill="none"
-            stroke="url(#gradient)"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            points={polylineString}
-          />
+              {/* Vertical Crosshair Line for Active Point */}
+              {activePointCoord && (
+                <line
+                  x1={activePointCoord.x}
+                  y1={paddingTop}
+                  x2={activePointCoord.x}
+                  y2={height - paddingBottom}
+                  stroke="#6366f1"
+                  strokeWidth="1.5"
+                  strokeDasharray="3 3"
+                  className="animate-fade-in"
+                />
+              )}
 
-          {/* Area under line */}
-          <polygon
-            fill="url(#areaGradient)"
-            points={`${points[0]?.x},${height - padding} ${polylineString} ${points[points.length - 1]?.x},${height - padding}`}
-          />
+              {/* Polyline & Fill Area */}
+              {dataPoints.length > 1 ? (
+                <>
+                  <polygon
+                    fill="url(#areaGradient)"
+                    points={`${points[0]?.x},${height - paddingBottom} ${polylineString} ${points[points.length - 1]?.x},${height - paddingBottom}`}
+                  />
+                  <polyline
+                    fill="none"
+                    stroke="url(#gradient)"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    points={polylineString}
+                  />
+                </>
+              ) : (
+                /* Single Day Bar indicator */
+                <line
+                  x1={points[0]?.x}
+                  y1={height - paddingBottom}
+                  x2={points[0]?.x}
+                  y2={points[0]?.y}
+                  stroke="url(#gradient)"
+                  strokeWidth="6"
+                  strokeLinecap="round"
+                />
+              )}
 
-          {/* Points circles */}
-          {points.map((p, index) => (
-            <g key={index} className="group cursor-pointer">
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r="4.5"
-                className="fill-indigo-650 dark:fill-indigo-400 stroke-white dark:stroke-slate-900 hover:scale-130 transition-transform"
-              />
-              {/* Tooltip trigger hover */}
-              <title>{`${p.dp.date}: $${p.dp.amount}`}</title>
-            </g>
-          ))}
+              {/* Interactive Points Circles */}
+              {points.map((p, index) => {
+                const isSelected = activePoint?.date === p.dp.date;
+                const isHovered = hoveredChartPoint?.dp?.date === p.dp.date;
 
-          {/* Gradients */}
-          <defs>
-            <linearGradient id="gradient" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#4f46e5" />
-              <stop offset="100%" stopColor="#ec4899" />
-            </linearGradient>
-            <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.15" />
-              <stop offset="100%" stopColor="#4f46e5" stopOpacity="0.0" />
-            </linearGradient>
-          </defs>
-        </svg>
+                return (
+                  <g 
+                    key={index} 
+                    className="cursor-pointer group"
+                    onClick={() => setSelectedChartPoint(p.dp)}
+                    onMouseEnter={() => setHoveredChartPoint(p)}
+                    onMouseLeave={() => setHoveredChartPoint(null)}
+                  >
+                    {/* Pulsing selection halo */}
+                    {(isSelected || isHovered) && (
+                      <circle
+                        cx={p.x}
+                        cy={p.y}
+                        r="10"
+                        className="fill-indigo-500/20 stroke-indigo-500 stroke-1 animate-pulse"
+                      />
+                    )}
 
-        {/* Labels bar */}
-        <div className="flex justify-between px-8 text-[9px] font-bold text-slate-450 uppercase tracking-widest mt-2">
-          <span>{dataPoints[0]?.date}</span>
-          <span>{dataPoints[dataPoints.length - 1]?.date}</span>
+                    {/* Outer border ring */}
+                    <circle
+                      cx={p.x}
+                      cy={p.y}
+                      r={isSelected ? "6" : "4.5"}
+                      className={`transition-all duration-200 ${
+                        isSelected
+                          ? 'fill-indigo-600 stroke-white dark:stroke-slate-900 stroke-2 shadow-lg'
+                          : 'fill-indigo-500 hover:fill-indigo-600 stroke-white dark:stroke-slate-900 stroke-1.5'
+                      }`}
+                    />
+
+                    {/* Extended invisible touch target */}
+                    <circle
+                      cx={p.x}
+                      cy={p.y}
+                      r="16"
+                      fill="transparent"
+                    />
+
+                    {/* Accessibility Tooltip */}
+                    <title>{`${p.dp.date}: $${p.dp.amount.toFixed(2)} (${p.dp.products?.length || 0} product types)`}</title>
+                  </g>
+                );
+              })}
+
+              {/* Gradients */}
+              <defs>
+                <linearGradient id="gradient" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#6366f1" />
+                  <stop offset="50%" stopColor="#ec4899" />
+                  <stop offset="100%" stopColor="#f59e0b" />
+                </linearGradient>
+                <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity="0.25" />
+                  <stop offset="60%" stopColor="#ec4899" stopOpacity="0.08" />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+            </svg>
+
+            {/* Date Labels Bar */}
+            <div className="flex justify-between pl-10 pr-6 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">
+              <span>{dataPoints[0]?.date}</span>
+              {dataPoints.length > 2 && (
+                <span>{dataPoints[Math.floor(dataPoints.length / 2)]?.date}</span>
+              )}
+              <span>{dataPoints[dataPoints.length - 1]?.date}</span>
+            </div>
+          </div>
+
+          <div className="mt-2 text-center text-[10px] font-medium text-slate-400 dark:text-slate-500">
+            💡 Click or hover on any dot above to inspect the exact products sold on that date.
+          </div>
         </div>
+
+        {/* Dynamic Product Breakdown Panel for Active Point */}
+        {activePoint && (
+          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm space-y-4 animate-slide-up">
+            {/* Header with Date and Day Stats */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
+                  <Calendar className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>Sales on {activePoint.date}</span>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300">
+                      {activePoint.ordersCount || 1} Order{activePoint.ordersCount !== 1 ? 's' : ''}
+                    </span>
+                  </h4>
+                  <p className="text-[10px] text-slate-400">
+                    Product contribution breakdown for this specific data point
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-right sm:text-right">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Day Revenue</span>
+                <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
+                  ${activePoint.amount.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* List of Products Sold on that Date */}
+            {activePoint.products && activePoint.products.length > 0 ? (
+              <div className="space-y-2.5">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Products Represented by This Dot ({activePoint.products.length}):
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                  {activePoint.products.map((prod, pIdx) => {
+                    const sharePct = activePoint.amount > 0 ? ((prod.revenue / activePoint.amount) * 100).toFixed(0) : 0;
+                    
+                    return (
+                      <div 
+                        key={pIdx} 
+                        className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-slate-100 dark:border-slate-800/80 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
+                      >
+                        {/* Product Thumbnail */}
+                        <div className="h-11 w-11 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0 flex items-center justify-center shadow-inner">
+                          {prod.image ? (
+                            <img 
+                              src={prod.image} 
+                              alt={prod.name} 
+                              className="h-full w-full object-cover"
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?w=200';
+                              }}
+                            />
+                          ) : (
+                            <Package className="h-5 w-5 text-slate-400 stroke-1" />
+                          )}
+                        </div>
+
+                        {/* Details */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs font-bold text-slate-900 dark:text-white truncate block">
+                              {prod.name}
+                            </span>
+                            <span className="text-xs font-black text-slate-900 dark:text-slate-100 shrink-0">
+                              ${prod.revenue.toFixed(2)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2 mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                            <span>
+                              {prod.quantity} unit{prod.quantity > 1 ? 's' : ''} sold (${prod.price.toFixed(2)} ea)
+                            </span>
+                            <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                              {sharePct}% share
+                            </span>
+                          </div>
+
+                          {/* Progress share bar */}
+                          <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full mt-1.5 overflow-hidden">
+                            <div 
+                              className="h-full bg-gradient-to-r from-indigo-500 to-rose-500 rounded-full"
+                              style={{ width: `${sharePct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-slate-500 p-3 rounded-xl bg-slate-50 dark:bg-slate-850 text-center">
+                Total daily sales recorded: ${activePoint.amount.toFixed(2)}. Detailed line-item breakdown is tracked for all standard checkout orders.
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
+
 
   return (
     <div className="admin-page mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-slide-up">
@@ -764,47 +1243,325 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
+
+          {/* Social & Acquisition Channels Summary */}
+          <div className="admin-theme-panel p-6 rounded-3xl shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+              <Layers className="h-4.5 w-4.5 text-indigo-500" />
+              <span>Acquisition Channels & Social Conversion</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+              {[
+                {
+                  name: 'Instagram',
+                  icon: <InstagramIcon className="h-4 w-4" />,
+                  bg: 'bg-pink-50 dark:bg-pink-950/30 border-pink-200 dark:border-pink-900/60',
+                  color: 'from-pink-500 to-rose-500',
+                  sales: stats.platformSales?.Instagram ?? orders.filter(o => (o.platform || '').toLowerCase().includes('insta')).reduce((sum, o) => sum + parseFloat(o.totalAmount || 0), 0),
+                  count: stats.platformOrders?.Instagram ?? orders.filter(o => (o.platform || '').toLowerCase().includes('insta')).length
+                },
+                {
+                  name: 'Facebook',
+                  icon: <FacebookIcon className="h-4 w-4" />,
+                  bg: 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900/60',
+                  color: 'from-blue-500 to-indigo-600',
+                  sales: stats.platformSales?.Facebook ?? orders.filter(o => (o.platform || '').toLowerCase().includes('fb') || (o.platform || '').toLowerCase().includes('face')).reduce((sum, o) => sum + parseFloat(o.totalAmount || 0), 0),
+                  count: stats.platformOrders?.Facebook ?? orders.filter(o => (o.platform || '').toLowerCase().includes('fb') || (o.platform || '').toLowerCase().includes('face')).length
+                },
+                {
+                  name: 'Direct Storefront',
+                  icon: <Globe className="h-4 w-4 text-slate-600 dark:text-slate-400" />,
+                  bg: 'bg-slate-50 dark:bg-slate-850/50 border-slate-200 dark:border-slate-700',
+                  color: 'from-slate-500 to-slate-700',
+                  sales: stats.platformSales?.Direct ?? orders.filter(o => !(o.platform || '').toLowerCase().includes('insta') && !(o.platform || '').toLowerCase().includes('fb') && !(o.platform || '').toLowerCase().includes('face')).reduce((sum, o) => sum + parseFloat(o.totalAmount || 0), 0),
+                  count: stats.platformOrders?.Direct ?? orders.filter(o => !(o.platform || '').toLowerCase().includes('insta') && !(o.platform || '').toLowerCase().includes('fb') && !(o.platform || '').toLowerCase().includes('face')).length
+                }
+              ].map((plat) => {
+                const pct = stats.totalSales > 0 ? (plat.sales / stats.totalSales) * 100 : 0;
+                return (
+                  <div key={plat.name} className={`p-4 rounded-2xl border ${plat.bg} space-y-2`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-white">
+                        {plat.icon}
+                        <span>{plat.name}</span>
+                      </div>
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
+                        {plat.count} {plat.count === 1 ? 'Order' : 'Orders'}
+                      </span>
+                    </div>
+                    <div className="text-xl font-black text-slate-900 dark:text-white">
+                      ${plat.sales.toFixed(2)}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                        <span>Share of Revenue</span>
+                        <span>{pct.toFixed(0)}%</span>
+                      </div>
+                      <div className="h-2 w-full bg-white/80 dark:bg-slate-900 rounded-full overflow-hidden">
+                        <div className={`h-full bg-gradient-to-r ${plat.color} rounded-full`} style={{ width: `${pct}%` }}></div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* -------------------- 2. PRODUCTS TAB (CRUD) -------------------- */}
+      {/* -------------------- 2. PRODUCTS TAB (CRUD & BULK DISCOUNTS) -------------------- */}
       {activeTab === 'products' && (
         <div className="space-y-6">
-          {/* Action Row */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              {/* Local search input */}
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search catalog..."
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                  className="w-full sm:w-60 rounded-xl admin-theme-input py-2 pl-9 pr-4 text-xs font-semibold focus:outline-none"
-                />
-                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+          {/* Main Filter & Action Bar */}
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm space-y-4">
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2 flex-1">
+                {/* Search Input */}
+                <div className="relative min-w-[220px] flex-1 sm:flex-initial">
+                  <input
+                    type="text"
+                    placeholder="Search by name, description, ID, brand..."
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="w-full sm:w-64 rounded-xl admin-theme-input py-2 pl-9 pr-4 text-xs font-semibold focus:outline-none"
+                  />
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                </div>
+
+                {/* Category Filter */}
+                <select
+                  value={productCatFilter}
+                  onChange={(e) => setProductCatFilter(e.target.value)}
+                  className="rounded-xl admin-theme-select py-2 px-3 text-xs font-semibold focus:outline-none cursor-pointer"
+                >
+                  <option value="All">All Categories</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+
+                {/* Discount Status Filter */}
+                <select
+                  value={discountStatusFilter}
+                  onChange={(e) => setDiscountStatusFilter(e.target.value)}
+                  className="rounded-xl admin-theme-select py-2 px-3 text-xs font-semibold focus:outline-none cursor-pointer"
+                >
+                  <option value="All">All Discount Statuses</option>
+                  <option value="Discounted">🔥 Discounted Products Only</option>
+                  <option value="NonDiscounted">🏷️ Regular Price Only</option>
+                </select>
+
+                {/* Toggle Advanced Filters Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer border ${
+                    showAdvancedFilters || (hasActiveFilters && (productSubcatFilter !== 'All' || productBrandFilter || productGenderFilter !== 'All' || minPriceFilter || maxPriceFilter))
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-300'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                  }`}
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  <span>Filters</span>
+                  {(productSubcatFilter !== 'All' || productBrandFilter || productGenderFilter !== 'All' || minPriceFilter || maxPriceFilter) && (
+                    <span className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse" />
+                  )}
+                </button>
               </div>
 
-              {/* Local Category Filter - dynamic from DB */}
-              <select
-                value={productCatFilter}
-                onChange={(e) => setProductCatFilter(e.target.value)}
-                className="rounded-xl admin-theme-select py-2 px-3 text-xs font-semibold focus:outline-none"
-              >
-                <option value="All">All Categories</option>
-                {categories.map(c => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Publish to Instagram Button */}
+                <button
+                  type="button"
+                  onClick={() => openInstagramPublish(null)}
+                  style={{
+                    background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '9px 14px',
+                    borderRadius: '12px',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 8px rgba(220, 39, 67, 0.35)'
+                  }}
+                  title={selectedProductIds.length > 0 ? `Publish ${selectedProductIds.length} selected products in 1 Instagram Carousel post` : "Create custom Instagram post"}
+                >
+                  <InstagramIcon size={16} color="#ffffff" />
+                  <span>
+                    {selectedProductIds.length > 0 
+                      ? `Publish (${selectedProductIds.length}) Carousel to IG` 
+                      : 'Publish to Instagram'}
+                  </span>
+                </button>
+
+                {/* Publish to Facebook Button */}
+                <button
+                  type="button"
+                  onClick={() => openFacebookPublish(null)}
+                  style={{
+                    background: 'linear-gradient(135deg, #1877F2 0%, #0d5dbf 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '9px 14px',
+                    borderRadius: '12px',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 8px rgba(24, 119, 242, 0.35)'
+                  }}
+                  title={selectedProductIds.length > 0 ? `Publish ${selectedProductIds.length} selected products in 1 Facebook Gallery post` : "Create custom Facebook post"}
+                >
+                  <FacebookIcon size={16} color="#ffffff" />
+                  <span>
+                    {selectedProductIds.length > 0
+                      ? `Publish (${selectedProductIds.length}) Gallery to FB`
+                      : 'Publish to Facebook'}
+                  </span>
+                </button>
+
+
+                {/* Add New Product Button */}
+                <button
+                  onClick={openAddModal}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl admin-theme-action-btn px-4 py-2.5 text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0"
+                >
+                  <Plus className="h-4.5 w-4.5" />
+                  <span>Add New Product</span>
+                </button>
+              </div>
             </div>
 
-            <button
-              onClick={openAddModal}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl admin-theme-action-btn px-4 py-2.5 text-xs font-bold shadow-sm transition-all cursor-pointer"
-            >
-              <Plus className="h-4.5 w-4.5" />
-              <span>Add New Product</span>
-            </button>
+
+            {/* Expandable Advanced Filters Panel */}
+            {showAdvancedFilters && (
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 animate-slide-up">
+                {/* Subcategory Filter */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Subcategory / Type</label>
+                  <select
+                    value={productSubcatFilter}
+                    onChange={(e) => setProductSubcatFilter(e.target.value)}
+                    className="w-full rounded-xl admin-theme-select py-1.5 px-2.5 text-xs font-semibold focus:outline-none"
+                  >
+                    <option value="All">All Subcategories</option>
+                    {(productCatFilter !== 'All' ? getSubcategoriesForCategory(productCatFilter) : getAllDefinedSubcategories()).map(sub => (
+                      <option key={sub} value={sub}>{sub}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Brand Filter */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Brand</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. TrendVibe, Selvedge"
+                    value={productBrandFilter}
+                    onChange={(e) => setProductBrandFilter(e.target.value)}
+                    className="w-full rounded-xl admin-theme-input py-1.5 px-2.5 text-xs font-semibold focus:outline-none"
+                  />
+                </div>
+
+                {/* Gender Target Filter */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Gender Target</label>
+                  <select
+                    value={productGenderFilter}
+                    onChange={(e) => setProductGenderFilter(e.target.value)}
+                    className="w-full rounded-xl admin-theme-select py-1.5 px-2.5 text-xs font-semibold focus:outline-none"
+                  >
+                    <option value="All">All Genders</option>
+                    <option value="Men">Men</option>
+                    <option value="Women">Women</option>
+                    <option value="Kids">Kids</option>
+                    <option value="Unisex">Unisex</option>
+                  </select>
+                </div>
+
+                {/* Price Range Filter */}
+                <div className="space-y-1 sm:col-span-2 lg:col-span-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Price Range ($)</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Min $"
+                      value={minPriceFilter}
+                      onChange={(e) => setMinPriceFilter(e.target.value)}
+                      className="w-full rounded-xl admin-theme-input py-1.5 px-2 text-xs font-semibold focus:outline-none"
+                    />
+                    <span className="text-slate-400 font-bold">-</span>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Max $"
+                      value={maxPriceFilter}
+                      onChange={(e) => setMaxPriceFilter(e.target.value)}
+                      className="w-full rounded-xl admin-theme-input py-1.5 px-2 text-xs font-semibold focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Reset Filters Action */}
+                <div className="flex items-end justify-end">
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    disabled={!hasActiveFilters}
+                    className="w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    <span>Reset Filters</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Results Count & Bulk Selection Quick Toolbar */}
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs font-semibold text-slate-600 dark:text-slate-300">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span>
+                  Showing <strong className="text-slate-900 dark:text-white font-bold">{filteredProducts.length}</strong> of {products.length} products
+                </span>
+                {hasActiveFilters && (
+                  <button
+                    onClick={handleResetFilters}
+                    className="text-[10px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 font-bold px-2 py-0.5 rounded-full hover:underline"
+                  >
+                    Reset active filters ✕
+                  </button>
+                )}
+              </div>
+
+              {filteredProducts.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={selectAllFiltered}
+                    className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer"
+                  >
+                    <CheckSquare className="h-3.5 w-3.5" />
+                    <span>Select All {filteredProducts.length} Filtered</span>
+                  </button>
+                  {selectedProductIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProductIds([])}
+                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-normal underline"
+                    >
+                      Deselect
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Bulk Action Toolbar (appears when items are selected) */}
@@ -814,6 +1571,50 @@ export default function AdminDashboard() {
                 {selectedProductIds.length} product{selectedProductIds.length > 1 ? 's' : ''} selected
               </span>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={openMultiInstagramPublish}
+                  style={{
+                    background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 8px rgba(220, 39, 67, 0.35)'
+                  }}
+                  title="Publish selected products in 1 Instagram Carousel post"
+                >
+                  <InstagramIcon size={14} color="#ffffff" />
+                  <span>IG Carousel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openMultiFacebookPublish}
+                  style={{
+                    background: 'linear-gradient(135deg, #1877F2 0%, #0d5dbf 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 8px rgba(24, 119, 242, 0.35)'
+                  }}
+                  title="Publish selected products in 1 Facebook Gallery post"
+                >
+                  <FacebookIcon size={14} color="#ffffff" />
+                  <span>FB Gallery</span>
+                </button>
                 <button
                   onClick={() => { setBulkDiscountInput(''); setIsDiscountModalOpen(true); }}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 transition-colors cursor-pointer"
@@ -920,7 +1721,49 @@ export default function AdminDashboard() {
                           })()}
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center justify-center gap-2">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openInstagramPublish(p)}
+                              style={{
+                                background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
+                                color: '#ffffff',
+                                border: 'none',
+                                padding: '6px 7px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 2px 6px rgba(220, 39, 67, 0.35)',
+                                flexShrink: 0
+                              }}
+                              title="Publish product to Instagram feed"
+                            >
+                              <InstagramIcon size={14} color="#ffffff" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => openFacebookPublish(p)}
+                              style={{
+                                background: 'linear-gradient(135deg, #1877F2 0%, #0d5dbf 100%)',
+                                color: '#ffffff',
+                                border: 'none',
+                                padding: '6px 7px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 2px 6px rgba(24, 119, 242, 0.35)',
+                                flexShrink: 0
+                              }}
+                              title="Publish product to Facebook Page"
+                            >
+                              <FacebookIcon size={14} color="#ffffff" />
+                            </button>
+
                             <button
                               onClick={() => openEditModal(p)}
                               className="rounded p-1.5 text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/20 transition-colors"
@@ -936,6 +1779,7 @@ export default function AdminDashboard() {
                               <Trash2 className="h-4.5 w-4.5" />
                             </button>
                           </div>
+
                         </td>
                       </tr>
                     ))
@@ -957,15 +1801,16 @@ export default function AdminDashboard() {
                   <tr>
                     <th className="px-6 py-4">Order Ref</th>
                     <th className="px-6 py-4">Client Detail</th>
+                    <th className="px-6 py-4">Channel / Platform</th>
                     <th className="px-6 py-4">Amount</th>
-                    <th className="sticky right-[76px] z-10 bg-slate-50 dark:bg-slate-950/60 px-6 py-4 min-w-[230px] shadow-[-12px_0_18px_-20px_rgba(15,23,42,0.8)]">Status & Dispatch</th>
-                    <th className="sticky right-0 z-10 bg-slate-50 dark:bg-slate-950/60 px-6 py-4 text-center min-w-[76px]">Actions</th>
+                    <th className="sticky right-[110px] z-10 bg-slate-50 dark:bg-slate-950/60 px-6 py-4 min-w-[220px] shadow-[-12px_0_18px_-20px_rgba(15,23,42,0.8)]">Status & Dispatch</th>
+                    <th className="sticky right-0 z-20 bg-slate-50 dark:bg-slate-950/60 px-3 py-4 text-center w-[110px] min-w-[110px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-850 font-semibold text-slate-700 dark:text-slate-300">
                   {orders.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="px-6 py-10 text-center text-slate-500 font-normal">
+                      <td colSpan="6" className="px-6 py-10 text-center text-slate-500 font-normal">
                         No orders recorded in database.
                       </td>
                     </tr>
@@ -981,8 +1826,11 @@ export default function AdminDashboard() {
                           <span className="text-[10px] text-slate-450 font-normal block">{o.email}</span>
                           <span className="text-[10px] text-slate-450 font-normal line-clamp-1 max-w-[200px]">{o.address}</span>
                         </td>
-                        <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">${o.totalAmount.toFixed(2)}</td>
-                        <td className="sticky right-[76px] z-10 bg-white dark:bg-slate-900 px-6 py-4 min-w-[230px] shadow-[-12px_0_18px_-20px_rgba(15,23,42,0.8)]">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {renderPlatformBadge(o.platform)}
+                        </td>
+                        <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">${parseFloat(o.totalAmount || 0).toFixed(2)}</td>
+                        <td className="sticky right-[110px] z-10 bg-white dark:bg-slate-900 px-6 py-4 min-w-[220px] shadow-[-12px_0_18px_-20px_rgba(15,23,42,0.8)]">
                           <div className="flex flex-col gap-2">
                             <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${getOrderStatusBadgeClass(o.status)}`}>
                               {o.status}
@@ -999,18 +1847,38 @@ export default function AdminDashboard() {
                               <option value="Delivered">Delivered</option>
                               <option value="Cancelled">Cancelled</option>
                             </select>
+                            {o.refundStatus === 'Approved' && (
+                              <span className="inline-flex w-fit items-center gap-1 rounded-full bg-teal-50 border border-teal-200 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-teal-700 dark:bg-teal-950/30 dark:border-teal-800 dark:text-teal-400">
+                                <RotateCcw className="h-3 w-3" />
+                                Refunded ${parseFloat(o.refundAmount || 0).toFixed(2)}
+                              </span>
+                            )}
                           </div>
                         </td>
-                        <td className="sticky right-0 z-10 bg-white dark:bg-slate-900 px-6 py-4 text-center min-w-[76px]">
-                          <button
-                            onClick={() => handleOrderDelete(o.id)}
-                            className="rounded p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors"
-                            title="Delete order"
-                          >
-                            <Trash2 className="h-4.5 w-4.5" />
-                          </button>
+                        <td className="sticky right-0 z-20 bg-white dark:bg-slate-900 px-3 py-4 text-center w-[110px] min-w-[110px]">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {o.refundStatus !== 'Approved' && (
+                              <button
+                                onClick={() => openRefundModal(o)}
+                                className="rounded-lg p-2 bg-teal-50 text-teal-700 hover:bg-teal-600 hover:text-white dark:bg-teal-950/50 dark:text-teal-400 dark:hover:bg-teal-600 dark:hover:text-white transition-all shadow-sm flex items-center justify-center"
+                                title="Approve / Issue Refund"
+                                aria-label="Approve Refund"
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleOrderDelete(o.id)}
+                              className="rounded-lg p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all flex items-center justify-center"
+                              title="Delete order"
+                              aria-label="Delete order"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
+
                     ))
                   )}
                 </tbody>
@@ -1755,6 +2623,50 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-600 dark:text-slate-350">Subcategory / Type</label>
+                  <select
+                    value={pSubcategory}
+                    onChange={(e) => setPSubcategory(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2 px-3 focus:outline-none focus:border-brown-primary text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  >
+                    <option value="">Select a subcategory</option>
+                    {getSubcategoriesForCategory(pCategory).map(sub => (
+                      <option key={sub} value={sub}>{sub}</option>
+                    ))}
+                    {pSubcategory && !getSubcategoriesForCategory(pCategory).includes(pSubcategory) && (
+                      <option value={pSubcategory}>{pSubcategory}</option>
+                    )}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-600 dark:text-slate-350">Brand</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. TrendVibe"
+                    value={pBrand}
+                    onChange={(e) => setPBrand(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2 px-3 focus:outline-none focus:border-brown-primary text-slate-900 placeholder:text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-600 dark:text-slate-350">Gender Target</label>
+                  <select
+                    value={pGender}
+                    onChange={(e) => setPGender(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2 px-3 focus:outline-none focus:border-brown-primary text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  >
+                    <option value="Unisex">Unisex</option>
+                    <option value="Men">Men</option>
+                    <option value="Women">Women</option>
+                    <option value="Kids">Kids</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="space-y-1">
                 <label className="font-bold text-slate-700 dark:text-slate-200">Description</label>
                 <textarea
@@ -1854,6 +2766,172 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* Single Instagram Publish Modal */}
+      <InstagramPublishModal
+        isOpen={isIgModalOpen}
+        onClose={() => {
+          setIsIgModalOpen(false);
+          setIgSelectedProduct(null);
+        }}
+        product={igSelectedProduct}
+        token={token}
+        onSuccess={(data) => {
+          triggerSuccess('Product successfully published to Instagram feed!');
+          loadData();
+        }}
+      />
+
+      {/* Multiple Instagram Publish Modal (Carousel) */}
+      <MultiInstagramPublishModal
+        isOpen={isMultiIgModalOpen}
+        onClose={() => setIsMultiIgModalOpen(false)}
+        selectedProducts={products.filter(p => selectedProductIds.includes(p.id))}
+        token={token}
+        onSuccess={(res) => {
+          triggerSuccess(res?.message || 'Instagram Carousel post successfully published!');
+          loadData();
+        }}
+      />
+
+      {/* Single Facebook Publish Modal */}
+      <FacebookPublishModal
+        isOpen={isFbModalOpen}
+        onClose={() => {
+          setIsFbModalOpen(false);
+          setFbSelectedProduct(null);
+        }}
+        product={fbSelectedProduct}
+        token={token}
+        onSuccess={(data) => {
+          triggerSuccess('Product successfully published to Facebook Page!');
+          loadData();
+        }}
+      />
+
+      {/* Multiple Facebook Publish Modal (Gallery) */}
+      <MultiFacebookPublishModal
+        isOpen={isMultiFbModalOpen}
+        onClose={() => setIsMultiFbModalOpen(false)}
+        selectedProducts={products.filter(p => selectedProductIds.includes(p.id))}
+        token={token}
+        onSuccess={(res) => {
+          triggerSuccess(res?.message || 'Facebook Gallery post successfully published!');
+          loadData();
+        }}
+      />
+
+      {/* ── Refund Approval Modal ── */}
+      {isRefundModalOpen && refundTargetOrder && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md animate-slide-up flex flex-col my-auto overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400">
+                  <RotateCcw className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Approve Refund</h3>
+                  <p className="text-[11px] text-slate-500">Review amount and issue customer refund</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setIsRefundModalOpen(false); setRefundTargetOrder(null); }}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                aria-label="Close modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-6 py-5 space-y-4 overflow-y-auto max-h-[60vh]">
+              {/* Order summary */}
+              <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800 p-4 space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Order Reference</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{refundTargetOrder.orderReference}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Customer</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{refundTargetOrder.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Email</span>
+                  <span className="font-semibold text-slate-600 dark:text-slate-300">{refundTargetOrder.email}</span>
+                </div>
+                <div className="flex justify-between border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
+                  <span className="text-slate-500 font-medium">Order Total</span>
+                  <span className="font-bold text-slate-900 dark:text-white">${parseFloat(refundTargetOrder.totalAmount || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Refund amount input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                  Refund Amount (USD)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">$</span>
+                  <input
+                    type="number"
+                    min="0.01"
+                    max={parseFloat(refundTargetOrder.totalAmount || 0)}
+                    step="0.01"
+                    value={refundAmountInput}
+                    onChange={(e) => setRefundAmountInput(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 py-2.5 pl-8 pr-4 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500"
+                    placeholder="0.00"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Max refund: ${parseFloat(refundTargetOrder.totalAmount || 0).toFixed(2)} · Customer will receive a confirmation email automatically.
+                </p>
+              </div>
+
+              {/* 3-5 business days note */}
+              <div className="rounded-xl bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 px-4 py-3 text-xs text-teal-700 dark:text-teal-400 font-medium flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-teal-500" />
+                <span>The customer will be emailed that their refund will appear in their account within <strong>3–5 business days</strong>.</span>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 flex items-center justify-end gap-3 shrink-0 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40">
+              <button
+                type="button"
+                onClick={() => { setIsRefundModalOpen(false); setRefundTargetOrder(null); }}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRefundApprove}
+                disabled={refundSubmitting}
+                className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-md hover:shadow-lg"
+              >
+                {refundSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Processing Refund...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="h-4 w-4" />
+                    <span>Approve & Notify Customer</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
+
+

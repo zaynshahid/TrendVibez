@@ -229,6 +229,7 @@ export function CartProvider({ children }) {
       removeFromCart,
       clearCart,
       syncCart,
+      getItemEffectivePrice,
       cartTotal: parseFloat(cartTotal.toFixed(2)),
       cartCount
     }}>
