@@ -17,28 +17,33 @@ const app = express();
 
 // Global Middlewares
 app.use(cors({
-  origin: '*', // For development, allow any front-end source
+  origin: '*', // For development and production
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
-// Base Health Check
-app.get('/api/health', (req, res) => {
+// API Router
+const apiRouter = express.Router();
+
+apiRouter.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'TrendVibe API is running' });
 });
 
-// Register Endpoints
-app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/cart', cartRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/contact', contactRoutes);
-app.use('/api/admin/activity-logs', activityLogsRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/chat', chatRoutes);
-app.use('/api/currency', currencyRoutes);
+apiRouter.use('/auth', authRoutes);
+apiRouter.use('/products', productRoutes);
+apiRouter.use('/cart', cartRoutes);
+apiRouter.use('/orders', orderRoutes);
+apiRouter.use('/admin', adminRoutes);
+apiRouter.use('/contact', contactRoutes);
+apiRouter.use('/admin/activity-logs', activityLogsRoutes);
+apiRouter.use('/categories', categoryRoutes);
+apiRouter.use('/chat', chatRoutes);
+apiRouter.use('/currency', currencyRoutes);
+
+// Mount at both /api and / for flexible routing compatibility
+app.use('/api', apiRouter);
+app.use('/', apiRouter);
 
 // 404 Route handler
 app.use((req, res) => {
