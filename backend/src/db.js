@@ -171,22 +171,22 @@ async function seedAdmin() {
   }
 
   if (users.length === 0) {
-    const salt1 = bcrypt.genSaltSync(10);
-    const salt2 = bcrypt.genSaltSync(10);
+    const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    if (!adminEmail || !adminPassword) {
+      console.warn('Skipping admin seed: configure ADMIN_EMAIL and ADMIN_PASSWORD to create the initial admin account.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail) || adminPassword.length < 16) {
+      throw new Error('ADMIN_EMAIL must be valid and ADMIN_PASSWORD must contain at least 16 characters.');
+    }
+
     users = [
       {
         id: uuidv4(),
         name: 'TrendVibe Admin',
-        email: 'admin@trendvibe.com',
-        password: bcrypt.hashSync('adminpassword', salt1),
-        role: 'admin',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: uuidv4(),
-        name: 'Zain Shahid',
-        email: 'zainshahid131@gmail.com',
-        password: bcrypt.hashSync('123456789', salt2),
+        email: adminEmail,
+        password: bcrypt.hashSync(adminPassword, bcrypt.genSaltSync(10)),
         role: 'admin',
         createdAt: new Date().toISOString()
       }
@@ -334,7 +334,7 @@ async function seedOrdersAndCarts() {
               name: order.name,
               email: order.email,
               address: order.address,
-              paymentStatus: order.paymentStatus || 'Paid',
+              paymentStatus: order.paymentStatus || 'Pending',
               paymentMethod: order.paymentMethod || 'Mock Card',
               platform: 'Direct',
               refundStatus: 'None',
@@ -836,88 +836,101 @@ export async function clearCart(userId) {
 // Order methods
 // ==========================================
 
-export async function createOrder({ id, orderReference, userId, totalAmount, currencyCode, currencyRate, name, email, address, paymentStatus, paymentMethod, platform = 'Direct', createdAt, items }) {
+export async function createOrder({ id, orderReference, userId, totalAmount, currencyCode, currencyRate, name, email, address, paymentMethod, platform = 'Direct', createdAt, items }) {
   const db = await getDb();
   const orderId = id || uuidv4();
   const created = createdAt || new Date().toISOString();
+  const session = cachedClient.startSession();
 
-  // Validate and deduct stock
-  for (const item of items) {
-    const product = await db.collection('products').findOne({ id: item.productId });
-    if (!product) {
-      throw new Error(`Product not found: ID ${item.productId}`);
-    }
+  try {
+    await session.withTransaction(async () => {
+      for (const item of items) {
+        const product = await db.collection('products').findOne(
+          { id: item.productId },
+          { session }
+        );
+        if (!product) {
+          throw new Error(`Product not found: ID ${item.productId}`);
+        }
 
-    const selectedSize = (item.selectedColor || '').toString().trim();
-    const sizeRows = await db.collection('product_size_inventory').find({ productId: item.productId }).toArray();
+        const selectedSize = (item.selectedColor || '').toString().trim();
+        const sizeRows = await db.collection('product_size_inventory')
+          .find({ productId: item.productId }, { session })
+          .toArray();
 
-    if (sizeRows.length > 0) {
-      const matchingSize = sizeRows.find(entry => (entry.sizeName || '').toLowerCase() === selectedSize.toLowerCase());
-      if (!matchingSize) {
-        throw new Error(`Selected size '${selectedSize || 'unknown'}' is unavailable for product '${product.name}'.`);
+        if (sizeRows.length > 0) {
+          const matchingSize = sizeRows.find(entry => (entry.sizeName || '').toLowerCase() === selectedSize.toLowerCase());
+          if (!matchingSize) {
+            throw new Error(`Selected size '${selectedSize || 'unknown'}' is unavailable for product '${product.name}'.`);
+          }
+
+          const decrementResult = await db.collection('product_size_inventory').updateOne(
+            { id: matchingSize.id, stock: { $gte: item.quantity } },
+            { $inc: { stock: -item.quantity } },
+            { session }
+          );
+          if (decrementResult.modifiedCount !== 1) {
+            throw new Error(`Insufficient stock for size '${matchingSize.sizeName}' on product '${product.name}'.`);
+          }
+
+          const remainingRows = await db.collection('product_size_inventory')
+            .find({ productId: item.productId }, { session })
+            .toArray();
+          const remainingStock = remainingRows.reduce((sum, row) => sum + parseInt(row.stock || 0), 0);
+          await db.collection('products').updateOne(
+            { id: item.productId },
+            { $set: { stock: Math.max(0, remainingStock) } },
+            { session }
+          );
+        } else {
+          const decrementResult = await db.collection('products').updateOne(
+            { id: item.productId, stock: { $gte: item.quantity } },
+            { $inc: { stock: -item.quantity } },
+            { session }
+          );
+          if (decrementResult.modifiedCount !== 1) {
+            throw new Error(`Insufficient stock for product '${product.name}'.`);
+          }
+        }
+
+        await db.collection('order_items').insertOne({
+          id: uuidv4(),
+          orderId,
+          productId: item.productId,
+          name: item.name,
+          price: parseFloat(item.price),
+          quantity: parseInt(item.quantity),
+          image: item.image,
+          selectedColor: item.selectedColor || '',
+          selectedSize: item.selectedSize || ''
+        }, { session });
       }
-      if (matchingSize.stock < item.quantity) {
-        throw new Error(`Insufficient stock for size '${matchingSize.sizeName}' on product '${product.name}'. Only ${matchingSize.stock} left.`);
-      }
 
-      await db.collection('product_size_inventory').updateOne(
-        { id: matchingSize.id },
-        { $inc: { stock: -item.quantity } }
-      );
+      await db.collection('orders').insertOne({
+        _id: orderId,
+        id: orderId,
+        orderReference,
+        userId,
+        totalAmount: parseFloat(totalAmount),
+        currencyCode: currencyCode || 'USD',
+        currencyRate: parseFloat(currencyRate || 1),
+        status: 'Pending',
+        name,
+        email,
+        address,
+        paymentStatus: 'Pending',
+        paymentMethod: paymentMethod || 'Cash on Delivery',
+        platform: platform || 'Direct',
+        refundStatus: 'None',
+        refundAmount: 0.00,
+        createdAt: created
+      }, { session });
 
-      const remainingRows = await db.collection('product_size_inventory').find({ productId: item.productId }).toArray();
-      const remainingStock = remainingRows.reduce((sum, row) => sum + parseInt(row.stock || 0), 0);
-      await db.collection('products').updateOne(
-        { id: item.productId },
-        { $set: { stock: Math.max(0, remainingStock) } }
-      );
-    } else {
-      if (product.stock < item.quantity) {
-        throw new Error(`Insufficient stock for product '${product.name}'. Only ${product.stock} left.`);
-      }
-      await db.collection('products').updateOne(
-        { id: item.productId },
-        { $inc: { stock: -item.quantity } }
-      );
-    }
-
-    // Insert order item
-    await db.collection('order_items').insertOne({
-      id: uuidv4(),
-      orderId,
-      productId: item.productId,
-      name: item.name,
-      price: parseFloat(item.price),
-      quantity: parseInt(item.quantity),
-      image: item.image,
-      selectedColor: item.selectedColor || '',
-      selectedSize: item.selectedSize || ''
+      await db.collection('cart_items').deleteMany({ userId }, { session });
     });
+  } finally {
+    await session.endSession();
   }
-
-  // Insert order
-  await db.collection('orders').insertOne({
-    _id: orderId,
-    id: orderId,
-    orderReference,
-    userId,
-    totalAmount: parseFloat(totalAmount),
-    currencyCode: currencyCode || 'USD',
-    currencyRate: parseFloat(currencyRate || 1),
-    status: 'Pending',
-    name,
-    email,
-    address,
-    paymentStatus: paymentStatus || 'Paid',
-    paymentMethod: paymentMethod || 'Mock Card',
-    platform: platform || 'Direct',
-    refundStatus: 'None',
-    refundAmount: 0.00,
-    createdAt: created
-  });
-
-  // Clear user's cart
-  await db.collection('cart_items').deleteMany({ userId });
 
   return await getOrderById(orderId);
 }

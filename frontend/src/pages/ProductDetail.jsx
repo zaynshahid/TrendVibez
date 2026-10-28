@@ -176,7 +176,7 @@ export default function ProductDetail() {
     <div className="page-shell" style={{ padding: '2rem 1rem 4rem' }}>
       <div style={{ maxWidth: '1240px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <Link to="/products" className="btn-ghost" style={{ width: 'fit-content' }}><ArrowLeft className="h-4 w-4" /> Back to Catalog</Link>
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'start' }}>
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 items-start">
           <div className="soft-card" style={{ position: 'relative', overflow: 'hidden', borderRadius: '28px' }}>
             <div style={{ aspectRatio: '4/5', overflow: 'hidden', background: 'var(--bg-secondary)' }}>
               <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }} />

@@ -6,7 +6,7 @@ export default function About() {
   return (
     <div className="page-shell" style={{ padding: '2rem 1rem 4rem' }}>
       <div style={{ maxWidth: '1240px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        <motion.section initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="hero-panel" style={{ display: 'grid', gridTemplateColumns: '1.05fr 0.95fr', gap: '0', borderRadius: '32px' }}>
+        <motion.section initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="hero-panel grid grid-cols-1 md:grid-cols-[1.05fr_0.95fr]" style={{ gap: '0', borderRadius: '32px' }}>
           <div style={{ padding: '3.5rem 3rem' }}>
             <span style={{ display: 'inline-flex', fontFamily: 'var(--font-sans)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--coffee)', marginBottom: '1rem' }}>Our Story</span>
             <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 'clamp(2rem, 4vw, 3rem)', color: 'var(--brown-dark)', marginBottom: '1rem' }}>Elevated essentials for a timeless wardrobe.</h1>

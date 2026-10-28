@@ -2,6 +2,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { getCartByUserId, createOrder, getOrders, getOrderById, updateOrderStatus, approveRefund, deleteOrder, query } from '../db.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { getRates } from '../services/currencyService.js';
 import {
   sendOrderPlacedEmail,
   sendOrderConfirmedEmail,
@@ -14,8 +15,15 @@ import {
   sendRefundApprovedEmail
 } from '../services/emailService.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
+import { createRateLimiter } from '../middleware/rateLimit.js';
 
 const router = express.Router();
+const checkoutRateLimit = createRateLimiter({
+  scope: 'checkout',
+  limit: 5,
+  windowMs: 15 * 60 * 1000,
+  keyGenerator: req => [req.ip, req.user?.id || 'anonymous']
+});
 
 function getEffectiveProductPrice(product) {
   const price = Number(product?.price);
@@ -28,8 +36,8 @@ function getEffectiveProductPrice(product) {
 }
 
 // CREATE ORDER (Checkout & Pay)
-router.post('/', requireAuth, async (req, res) => {
-  const { name, email, address, paymentMethod, currencyCode, currencyRate, platform } = req.body;
+router.post('/', requireAuth, checkoutRateLimit, async (req, res) => {
+  const { name, email, address, paymentMethod, currencyCode, platform } = req.body;
 
   if (!name || !email || !address) {
     return res.status(400).json({ message: 'Delivery name, email, and address are required' });
@@ -81,12 +89,19 @@ router.post('/', requireAuth, async (req, res) => {
 
     // Generate a random invoice reference: TV-XXXXXX
     const orderRef = `TV-${Math.floor(100000 + Math.random() * 900000)}`;
-    const isCod = paymentMethod && paymentMethod.toLowerCase().includes('cash');
+    const normalizedPaymentMethod = typeof paymentMethod === 'string'
+      ? paymentMethod.trim().toLowerCase()
+      : '';
+    if (normalizedPaymentMethod !== 'cash on delivery') {
+      return res.status(400).json({ message: 'Only Cash on Delivery is currently available.' });
+    }
     const supportedCurrencies = ['USD', 'PKR', 'EUR', 'GBP', 'AED', 'SAR'];
     const orderCurrency = supportedCurrencies.includes(currencyCode) ? currencyCode : 'USD';
-    const orderCurrencyRate = Number.isFinite(Number(currencyRate)) && Number(currencyRate) > 0
-      ? Number(currencyRate)
-      : 1;
+    const exchangeRates = await getRates();
+    const orderCurrencyRate = Number(exchangeRates.rates?.[orderCurrency]);
+    if (!Number.isFinite(orderCurrencyRate) || orderCurrencyRate <= 0) {
+      return res.status(503).json({ message: 'Currency conversion is temporarily unavailable.' });
+    }
     
     const newOrder = await createOrder({
       id: uuidv4(),
@@ -98,8 +113,7 @@ router.post('/', requireAuth, async (req, res) => {
       name,
       email,
       address,
-      paymentStatus: isCod ? 'Pending' : 'Paid',
-      paymentMethod: paymentMethod || 'Mock Card',
+      paymentMethod: 'Cash on Delivery',
       platform: orderPlatform,
       createdAt: new Date().toISOString(),
       items: orderItems
@@ -390,4 +404,3 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 });
 
 export default router;
-

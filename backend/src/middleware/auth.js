@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { findUserById } from '../db.js';
+import { JWT_SECRET } from '../env.js';
 
 // Express middleware can be async. Express will handle any thrown errors
 // that are caught, or we can catch them and call next(err) if needed.
@@ -12,7 +13,7 @@ export async function requireAuth(req, res, next) {
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_jwt_secret_trendvibe_2026');
+    const decoded = jwt.verify(token, JWT_SECRET);
     const user = await findUserById(decoded.id);
 
     if (!user) {

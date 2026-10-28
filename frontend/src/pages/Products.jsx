@@ -257,7 +257,7 @@ export default function Products() {
       `}</style>
 
       {/* ── Top Category Header Banner ───────────────────────────────── */}
-      <div style={{ backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', padding: '2.5rem 2rem 2rem' }}>
+      <div style={{ backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }} className="px-4 sm:px-8 pt-6 sm:pt-10 pb-5 sm:pb-8">
         <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
           {/* Title & Top Search */}
           <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
@@ -431,12 +431,12 @@ export default function Products() {
       </div>
 
       {/* ── Main Body ───────────────────────────────────────────────── */}
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '2rem 2rem 4rem' }}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-6 sm:py-8 pb-12 sm:pb-16">
 
-        <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: '2.5rem', alignItems: 'start' }}>
+        <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-6 md:gap-10 items-start">
 
           {/* ── Filter Sidebar ──────────────────────────────────── */}
-          <aside>
+          <aside className="hidden md:block">
             <div
               style={{
                 background: 'var(--bg-card)',

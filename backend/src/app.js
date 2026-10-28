@@ -16,6 +16,10 @@ import currencyRoutes from './routes/currency.js';
 const app = express();
 
 // Global Middlewares
+if (process.env.VERCEL === '1') {
+  app.set('trust proxy', 1);
+}
+
 app.use(cors({
   origin: '*', // For development and production
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

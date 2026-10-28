@@ -127,7 +127,7 @@ async function migrate() {
     name: row.name,
     email: row.email,
     address: row.address,
-    paymentStatus: row.paymentStatus || 'Paid',
+    paymentStatus: row.paymentStatus || 'Pending',
     paymentMethod: row.paymentMethod || 'Mock Card',
     platform: row.platform || 'Direct',
     refundStatus: row.refundStatus || 'None',

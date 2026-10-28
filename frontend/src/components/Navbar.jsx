@@ -54,9 +54,9 @@ export default function Navbar() {
       `}</style>
 
       <nav ref={navRef} style={{ position: 'sticky', top: 0, zIndex: 50, width: '100%', backgroundColor: 'rgba(247,242,235,0.95)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border-color)', boxShadow: scrolled ? 'var(--shadow-md)' : 'none', transition: 'box-shadow 0.3s ease' }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 2rem' }}>
-          <div style={{ display: 'flex', height: '68px', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Link to="/" style={{ fontFamily: 'var(--font-serif)', fontSize: '1.35rem', fontWeight: 700, color: 'var(--brown-dark)', letterSpacing: '0.04em', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div style={{ display: 'flex', height: '64px', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Link to="/" style={{ fontFamily: 'var(--font-serif)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--brown-dark)', letterSpacing: '0.04em', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
               <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--brown-primary)', flexShrink: 0 }} />
               TrendVibe
             </Link>
@@ -98,23 +98,32 @@ export default function Navbar() {
               )}
             </div>
 
-            <div className="flex md:hidden" style={{ alignItems: 'center', gap: '1rem' }}>
+            <div className="flex md:hidden items-center gap-2 sm:gap-3">
               <button
                 onClick={() => window.dispatchEvent(new CustomEvent('open-ai-chatbot'))}
-                className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-[#6F4E37]/10 text-[#6F4E37] border border-[#6F4E37]/30"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full bg-[#6F4E37]/10 text-[#6F4E37] border border-[#6F4E37]/30"
+                aria-label="Open AI Fashion Stylist"
               >
                 <Sparkles size={12} className="text-[#8B5E3C]" />
                 <span>AI</span>
               </button>
-              <Link to="/wishlist" style={{ position: 'relative', display: 'inline-flex', color: 'var(--text-secondary)' }} aria-label="Wishlist"><Heart size={20} />{wishlistCount > 0 && <span className="nav-wishlist-badge">{wishlistCount}</span>}</Link>
-              <Link to="/cart" style={{ position: 'relative', display: 'inline-flex', color: 'var(--text-secondary)' }} aria-label="Shopping cart"><ShoppingBag size={20} />{cartCount > 0 && <span className="nav-cart-badge">{cartCount}</span>}</Link>
-              <button className="icon-btn" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle menu">{isOpen ? <X size={22} /> : <Menu size={22} />}</button>
+              <Link to="/wishlist" className="relative p-1.5 text-[var(--text-secondary)] inline-flex items-center" aria-label="Wishlist">
+                <Heart size={19} />
+                {wishlistCount > 0 && <span className="nav-wishlist-badge">{wishlistCount}</span>}
+              </Link>
+              <Link to="/cart" className="relative p-1.5 text-[var(--text-secondary)] inline-flex items-center" aria-label="Shopping cart">
+                <ShoppingBag size={19} />
+                {cartCount > 0 && <span className="nav-cart-badge">{cartCount}</span>}
+              </Link>
+              <button className="p-1.5 -mr-1 text-[var(--text-secondary)] rounded-full hover:bg-[rgba(111,78,55,0.08)] transition-colors" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle menu">
+                {isOpen ? <X size={21} /> : <Menu size={21} />}
+              </button>
             </div>
           </div>
         </div>
 
         {isOpen && (
-          <div style={{ backgroundColor: 'var(--bg-primary)', borderTop: '1px solid var(--border-subtle)', paddingBottom: '1.5rem' }}>
+          <div style={{ backgroundColor: 'var(--bg-primary)', borderTop: '1px solid var(--border-subtle)', paddingBottom: '1.5rem', maxHeight: 'calc(100vh - 64px)', overflowY: 'auto' }}>
             <NavLink to="/" end onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Home</NavLink>
             <NavLink to="/products" onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Collection</NavLink>
             <NavLink to="/wishlist" onClick={() => setIsOpen(false)} className={({ isActive }) => `mobile-nav-link${isActive ? ' mobile-nav-link-active' : ''}`}>Wishlist</NavLink>

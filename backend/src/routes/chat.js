@@ -1,5 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from '../env.js';
 import { findUserById } from '../db.js';
 import { processChatMessage } from '../services/geminiChatService.js';
 
@@ -15,7 +16,7 @@ async function optionalAuth(req, res, next) {
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_jwt_secret_trendvibe_2026');
+    const decoded = jwt.verify(token, JWT_SECRET);
     const user = await findUserById(decoded.id);
     if (user) {
       req.user = {

@@ -15,25 +15,51 @@ import {
 import { requireAuth } from '../middleware/auth.js';
 import { sendWelcomeEmail, sendPasswordResetEmail } from '../services/emailService.js';
 import { logActivity, getClientIp } from '../services/activityLogger.js';
+import { JWT_SECRET } from '../env.js';
+import { createRateLimiter } from '../middleware/rateLimit.js';
 
 const router = express.Router();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const loginRateLimit = createRateLimiter({
+  scope: 'auth-login',
+  limit: 10,
+  windowMs: 15 * 60 * 1000
+});
+const registerRateLimit = createRateLimiter({
+  scope: 'auth-register',
+  limit: 5,
+  windowMs: 15 * 60 * 1000
+});
+const googleRateLimit = createRateLimiter({
+  scope: 'auth-google',
+  limit: 10,
+  windowMs: 15 * 60 * 1000
+});
+const forgotPasswordRateLimit = createRateLimiter({
+  scope: 'auth-forgot-password',
+  limit: 3,
+  windowMs: 15 * 60 * 1000,
+  keyGenerator: req => [req.ip, String(req.body?.email || '').trim().toLowerCase()]
+});
+const resetPasswordRateLimit = createRateLimiter({
+  scope: 'auth-reset-password',
+  limit: 5,
+  windowMs: 15 * 60 * 1000
+});
 
-// Read JWT secret lazily so it picks up the value AFTER dotenv has loaded.
-const getJwtSecret = () => process.env.JWT_SECRET || 'fallback_jwt_secret_trendvibe_2026';
 const JWT_EXPIRES_IN = '7d';
 
 // Generate Token Utility
 function generateToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role },
-    getJwtSecret(),
+    JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
   );
 }
 
 // REGISTER
-router.post('/register', async (req, res) => {
+router.post('/register', registerRateLimit, async (req, res) => {
   const { name, email, password } = req.body;
 
   if (!name || !email || !password) {
@@ -89,7 +115,7 @@ router.post('/register', async (req, res) => {
 });
 
 // LOGIN
-router.post('/login', async (req, res) => {
+router.post('/login', loginRateLimit, async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -100,35 +126,11 @@ router.post('/login', async (req, res) => {
     let user = await findUserByEmail(email);
 
     if (!user) {
-      // Auto-create user
-      const namePart = email.split('@')[0];
-      const name = namePart ? namePart.charAt(0).toUpperCase() + namePart.slice(1) : 'New User';
-      const salt = bcrypt.genSaltSync(10);
-      const hashedPassword = bcrypt.hashSync(password, salt);
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
 
-      user = await createUser({
-        id: uuidv4(),
-        name,
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        role: 'user',
-        createdAt: new Date().toISOString()
-      });
-      console.log(`Auto-created user on login: ${email}`);
-      // Send welcome email in background
-      sendWelcomeEmail(user);
-    } else if (!user.password) {
-      // If user has no password set (e.g. from Google login), set the provided password
-      const salt = bcrypt.genSaltSync(10);
-      const hashedPassword = bcrypt.hashSync(password, salt);
-      user = await updateUser(user.id, { password: hashedPassword });
-      console.log(`Set password for existing passwordless user on login: ${email}`);
-    } else {
-      // Standard verification
-      const isMatch = bcrypt.compareSync(password, user.password);
-      if (!isMatch) {
-        return res.status(401).json({ message: 'Invalid email or password' });
-      }
+    if (!user.password || !bcrypt.compareSync(password, user.password)) {
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     const token = generateToken(user);
@@ -161,45 +163,32 @@ router.post('/login', async (req, res) => {
 });
 
 // GOOGLE AUTHENTICATION
-router.post('/google', async (req, res) => {
+router.post('/google', googleRateLimit, async (req, res) => {
   const { credential } = req.body;
 
-  if (!credential) {
+  if (typeof credential !== 'string' || !credential) {
     return res.status(400).json({ message: 'Google credential token is required' });
   }
 
-  let email, name;
+  if (!process.env.GOOGLE_CLIENT_ID) {
+    return res.status(503).json({ message: 'Google Sign-In is not configured on this server.' });
+  }
 
-  // Mock Developer Google Token Bypass
-  if (credential.startsWith('mock_google_token_')) {
-    const payload = credential.replace('mock_google_token_', '');
-    const separatorIndex = payload.indexOf('::');
-    const endIndex = payload.lastIndexOf('::');
-    if (separatorIndex !== -1 && endIndex !== separatorIndex) {
-      name = payload.substring(separatorIndex + 2, endIndex);
-      email = payload.substring(endIndex + 2).toLowerCase();
-    } else {
-      const parts = payload.split('|');
-      name = parts[0] || 'Google User';
-      email = (parts[1] || 'googleuser@example.com').toLowerCase();
-    }
-  } else if (!process.env.GOOGLE_CLIENT_ID) {
-    return res.status(400).json({
-      message: 'Google Sign-In is not configured on this server. Please use the Developer Sandbox buttons on the login page, or register with email and password.'
+  let email, name;
+  try {
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
     });
-  } else {
-    try {
-      const ticket = await client.verifyIdToken({
-        idToken: credential,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
-      email = payload.email.toLowerCase();
-      name = payload.name;
-    } catch (error) {
-      console.error('Google token verification failed:', error);
-      return res.status(400).json({ message: 'Google sign-in verification failed. Check your Client ID configuration.' });
+    const payload = ticket.getPayload();
+    if (!payload?.email || payload.email_verified !== true) {
+      return res.status(401).json({ message: 'Google sign-in requires a verified email address.' });
     }
+    email = payload.email.toLowerCase();
+    name = payload.name || email.split('@')[0];
+  } catch (error) {
+    console.error('Google token verification failed:', error);
+    return res.status(401).json({ message: 'Google sign-in verification failed.' });
   }
 
   try {
@@ -329,7 +318,7 @@ router.put('/profile', requireAuth, async (req, res) => {
 });
 
 // FORGOT PASSWORD (Generate link & send email)
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', forgotPasswordRateLimit, async (req, res) => {
   const { email } = req.body;
 
   if (!email) {
@@ -368,7 +357,7 @@ router.post('/forgot-password', async (req, res) => {
 });
 
 // RESET PASSWORD (Verify token and update password)
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', resetPasswordRateLimit, async (req, res) => {
   const { token, newPassword } = req.body;
 
   if (!token || !newPassword) {
